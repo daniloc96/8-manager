@@ -162,7 +162,10 @@ async def test_show_settings_from_button(session, bot_session_factory) -> None:
     await menu.show_settings(update, SimpleNamespace(user_data={}, bot=None))
 
     assert query.text is not None
-    assert "vod_domain" in query.text
+    assert "Dominio VOD" in query.text
+    assert "http://vod.example.org" in query.text
+    data = [b.callback_data for row in query.markup.inline_keyboard for b in row]
+    assert "set:vod_domain" in data
 
 
 async def test_income_from_command(session, bot_session_factory) -> None:

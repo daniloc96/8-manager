@@ -186,9 +186,14 @@ async def test_reseller_reminder_only_their_lines(engine) -> None:
     assert "Mario Rossi" in body
     assert "Anna Bianchi" not in body
     assert all(
-        "renew:" in (button.callback_data or "")
+        any((button.callback_data or "").startswith(("renew:", "nr:")) for button in row)
         for row in markup.inline_keyboard[:-1]
-        for button in row
+    )
+    # Ogni linea in scadenza ha il pulsante per marcarla «non rinnova».
+    assert any(
+        (b.callback_data or "").startswith("nr:") and (b.callback_data or "").endswith(":set")
+        for row in markup.inline_keyboard
+        for b in row
     )
 
     # l'owner vede entrambe, e il dedupe è per chat

@@ -82,6 +82,8 @@ def line_card(line: Line, today: date) -> str:
         parts.append(" · ".join(technical))
 
     parts.append(f"<b>{esc(expiry_phrase(line, today))}</b>")
+    if getattr(line, "no_renewal", False):
+        parts.append("🚫 <b>Da non rinnovare</b>")
     if line.notes:
         parts.append(f"_{esc(line.notes)}_")
     return "\n".join(parts)

@@ -16,6 +16,7 @@ from app.bot.auth import access_for, is_group
 from app.config import get_settings
 from app.db import session_scope
 from app.models import Customer, Line, Reseller, Setting
+from app.services import settings as settings_service
 from app.services.queries import due_groups, income_report, lines_of_reseller
 from app.services.text import format_eur
 
@@ -339,6 +340,7 @@ async def show_settings(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
 
     async with session_scope() as session:
         values = list((await session.scalars(select(Setting).order_by(Setting.key))).all())
+        editable_values = await settings_service.all_values(session)
         customers = await session.scalar(select(func.count(Customer.id))) or 0
         lines = (
             await session.scalar(select(func.count(Line.id)).where(Line.deleted_at.is_(None))) or 0
@@ -349,20 +351,28 @@ async def show_settings(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
         "",
         f"Clienti: <b>{customers}</b> · Linee attive: <b>{lines}</b>",
         "",
-        "<b>Valori salvati</b>",
+        "<b>Modificabili dal bot</b>",
     ]
-    if values:
-        body.extend(f"• <code>{ui.esc(item.key)}</code>: {ui.esc(item.value)}" for item in values)
+    for key, definition in settings_service.EDITABLE_SETTINGS.items():
+        value = editable_values.get(key)
+        shown = f"<code>{ui.esc(value)}</code>" if value else "<i>non impostato</i>"
+        body.append(f"• <b>{ui.esc(definition.label)}</b> — {shown}")
+    body.append("")
+    body.append("<b>Altri valori salvati</b>")
+    extra = [item for item in values if item.key not in settings_service.EDITABLE_SETTINGS]
+    if extra:
+        body.extend(f"• <code>{ui.esc(item.key)}</code>: {ui.esc(item.value)}" for item in extra)
     else:
         body.append("Nessuno: si usano i default di <code>.env</code>.")
 
-    await target(
-        "\n".join(body),
-        parse_mode=ParseMode.HTML,
-        reply_markup=InlineKeyboardMarkup(
-            [[InlineKeyboardButton("🏠 Menu", callback_data="menu:home")]]
-        ),
-    )
+    rows = [
+        [InlineKeyboardButton(f"✏️ {definition.label}", callback_data=f"set:{key}")]
+        for key, definition in settings_service.EDITABLE_SETTINGS.items()
+    ]
+    rows.append([InlineKeyboardButton("🏠 Menu", callback_data="menu:home")])
+    markup = InlineKeyboardMarkup(rows)
+
+    await target("\n".join(body), parse_mode=ParseMode.HTML, reply_markup=markup)
 
 
 async def on_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:

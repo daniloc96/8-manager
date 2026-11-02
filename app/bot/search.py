@@ -78,11 +78,15 @@ async def on_text(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     from app.bot.editline import handle_text as handle_edit_text
     from app.bot.newline import handle_text as handle_new_text
     from app.bot.reseller import handle_request_text
+    from app.bot.settings_bot import handle_text as handle_setting_text
 
     if await handle_new_text(update, context):
         return
 
     if await handle_edit_text(update, context):
+        return
+
+    if await handle_setting_text(update, context):
         return
 
     pending = context.user_data.get("awaiting")

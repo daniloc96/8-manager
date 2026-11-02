@@ -109,12 +109,25 @@ Bot (owner):
 - gruppi rivenditore: `/collega` (rivenditore) o `/collega Mario` (owner),
   `/scollega`; nel gruppo solo comandi indirizzati, letture sì e modifiche no;
 - `/richiedi` rivenditore: richiesta in privato, approvazione owner con la
-  durata scelta, conferma al rivenditore e nel gruppo di origine.
+  durata scelta, conferma al rivenditore e nel gruppo di origine;
+- **wizard `/nuovo` completo**: nome, alias, servizio, rivenditore, etichetta,
+  prezzo, durata, ID pannello e codice di accesso. Alias, etichetta e dati
+  tecnici si possono saltare con **Salta**; il blocco finale da copiare nel
+  pannello riporta anche quello che è stato inserito;
+- **impostazioni modificabili**: `vod_domain` si cambia dal bot con
+  validazione (schema `http`/`https`, niente percorso né parametri). `-`
+  riporta la chiave al default di `.env`; un valore vuoto viene rifiutato;
+- **«Non rinnova» dal reminder**: ogni linea in scadenza ha il pulsante
+  **🚫 Non rinnova**, con conferma prima di scrivere. La marcatura non tocca
+  il pannello: è un promemoria che resta nel reminder delle 09:00 (anche se la
+  linea è lontana dalla scadenza) e si vede sulla scheda. Si annulla con
+  **↩️ Rinnova lo stesso** dal reminder o rinnovando la linea.
 
 Job:
 
-- reminder 09:00 all'owner (scadenze + eccezioni da rivedere) e a ogni
-  rivenditore con `telegram_user_id` e `notify`, solo le sue linee;
+- reminder 09:00 all'owner (scadenze, linee marcate «non rinnovare» ed
+  eccezioni da rivedere) e a ogni rivenditore con `telegram_user_id` e
+  `notify`, solo le sue linee;
 - deduplica per `(tipo, linea, chat, giorno)` in `notifications`;
 - una linea già scaduta viene segnalata il primo giorno dopo la scadenza, non
   ogni giorno;
@@ -137,16 +150,9 @@ CLI (`docker exec eight-manager-bot python -m app.cli …`):
 In ordine di valore. Nessuna di queste è necessaria perché il bot funzioni
 oggi: sono rifiniture che riducono il lavoro manuale.
 
-1. **Wizard `/nuovo` completo**: oggi chiede nome, servizio, rivenditore,
-   prezzo e durata; mancano alias, etichetta e dati tecnici del pannello.
-2. **“Non rinnova” dal reminder**: la specifica lo prevede sul messaggio delle
-   09:00. Da decidere *cosa* deve fare ora che la disattivazione manuale non
-   esiste: l'unica azione sensata è segnare la linea come “non rinnovare” e
-   aspettare che scada e sparisca dal pannello.
-3. **Impostazioni modificabili**: `settings` oggi è in sola lettura
-   (`vod_domain` si legge solo dal wizard).
-4. **Fase F**: rinnovo/cancellazione via HTTP sui pannelli. Rinviata di
-   proposito: richiede gestione errori su sistemi non nostri.
+1. **Fase F**: rinnovo/cancellazione via HTTP sui pannelli. Rinviata di
+   proposito: richiede gestione errori su sistemi non nostri. Gli adapter oggi
+   espongono solo `fetch_lines`: il bot legge e non scrive mai sui pannelli.
 
 Nota sulla modifica anagrafica: il **link VOD** non è un campo salvato, si
 genera da `vod_domain` + username e password della linea (vedi
@@ -179,7 +185,7 @@ Debito tecnico noto:
 ```bash
 uv sync                                  # dipendenze
 uv run ruff check . && uv run ruff format --check .
-uv run pytest -q                         # 184 test al 2026-11-02
+uv run pytest -q                         # 204 test al 2026-11-02
 ./scripts/deploy.sh --apply              # produzione
 ./scripts/verify.sh
 ```
@@ -191,4 +197,5 @@ sono altri stack.
 Migrazioni: `uv run alembic revision -m "…"`, poi il deploy applica
 `upgrade head` da solo. Le migrazioni già applicate in produzione:
 `fe398d565583` (schema iniziale) · `e077e6f8985d` (access code) ·
-`1b68e6a3f7e5` (eccezioni) · `81f880a2f4a3` (gruppo rivenditore).
+`1b68e6a3f7e5` (eccezioni) · `81f880a2f4a3` (gruppo rivenditore) ·
+`4d2c9a1b7e38` (flag «non rinnovare»).

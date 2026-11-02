@@ -4,6 +4,7 @@ from datetime import date, datetime
 from typing import TYPE_CHECKING
 
 from sqlalchemy import (
+    Boolean,
     CheckConstraint,
     Date,
     DateTime,
@@ -56,6 +57,11 @@ class Line(TimestampMixin, Base):
     expires_on: Mapped[date] = mapped_column(Date, nullable=False)
     anchor_day: Mapped[int] = mapped_column(Integer, nullable=False)
     notes: Mapped[str | None] = mapped_column(Text)
+    # Marcata dall'owner dal reminder: la linea non va rinnovata. La verità
+    # resta il pannello, quindi la linea sparisce dal bot solo quando la
+    # cancellazione remota la fa uscire dal sync.
+    no_renewal: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    no_renewal_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
     customer: Mapped[Customer] = relationship(back_populates="lines", lazy="joined")

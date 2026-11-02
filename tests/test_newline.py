@@ -4,8 +4,31 @@ from datetime import date
 from types import SimpleNamespace
 
 import pytest
+from sqlalchemy.ext.asyncio import async_sessionmaker
 
+import app.db as db_module
 from app.bot import newline
+
+OWNER_ID = 42
+
+
+@pytest.fixture(autouse=True)
+def _env(monkeypatch):
+    monkeypatch.setenv("OWNER_TELEGRAM_ID", str(OWNER_ID))
+    from app.config import get_settings
+
+    get_settings.cache_clear()
+    yield
+    get_settings.cache_clear()
+
+
+@pytest.fixture
+def bot_session_factory(engine, monkeypatch):
+    """Il wizard apre sessioni vere per leggere i rivenditori."""
+    factory = async_sessionmaker(engine, expire_on_commit=False)
+    monkeypatch.setattr(db_module, "_session_factory", factory)
+    monkeypatch.setattr(db_module, "_engine", engine)
+    return factory
 
 
 class FakeMessage:
@@ -68,7 +91,8 @@ async def test_wizard_price_input() -> None:
 
     assert await newline.handle_text(update, context) is True
     assert context.user_data["new_line"]["price"] == 550
-    assert context.user_data["new_line"]["step"] == "months"
+    # Dopo il prezzo restano i dati tecnici, poi il riepilogo.
+    assert context.user_data["new_line"]["step"] == "tech"
 
 
 async def test_wizard_months_input_validates_range() -> None:
@@ -84,6 +108,54 @@ async def test_wizard_months_input_validates_range() -> None:
     update = fake_update("12")
     assert await newline.handle_text(update, context) is True
     assert context.user_data["new_line"]["months"] == 12
+    assert context.user_data["new_line"]["step"] == "tech_id"
+
+
+async def test_wizard_collects_alias_and_label(session, bot_session_factory) -> None:
+    update = fake_update("Mario il rosso")
+    context = fake_context({"step": "alias", "name": "Mario Rossi", "service": "live"})
+
+    assert await newline.handle_text(update, context) is True
+    assert context.user_data["new_line"]["alias"] == "Mario il rosso"
+    assert context.user_data["new_line"]["step"] == "reseller"
+
+    update = fake_update("Linea 2")
+    context = fake_context(
+        {"step": "label", "name": "Mario Rossi", "service": "live", "price": 500}
+    )
+    assert await newline.handle_text(update, context) is True
+    assert context.user_data["new_line"]["label"] == "Linea 2"
+    assert context.user_data["new_line"]["step"] == "price"
+
+
+async def test_wizard_optional_fields_accept_dash(session, bot_session_factory) -> None:
+    update = fake_update("-")
+    context = fake_context({"step": "alias", "name": "Mario Rossi", "service": "live"})
+
+    await newline.handle_text(update, context)
+
+    assert context.user_data["new_line"]["alias"] is None
+
+
+async def test_wizard_tech_fields_then_summary() -> None:
+    update = fake_update("12345")
+    context = fake_context(
+        {
+            "step": "tech_id",
+            "name": "Mario Rossi",
+            "service": "live",
+            "price": 500,
+            "months": 3,
+        }
+    )
+
+    await newline.handle_text(update, context)
+    assert context.user_data["new_line"]["panel_external_id"] == "12345"
+    assert context.user_data["new_line"]["step"] == "tech_code"
+
+    update = fake_update("ABC-1")
+    await newline.handle_text(update, context)
+    assert context.user_data["new_line"]["panel_access_code"] == "ABC-1"
     assert context.user_data["new_line"]["step"] == "confirm"
 
 

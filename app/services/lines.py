@@ -7,6 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models import Customer, Line, Renewal
 from app.models.enums import RenewalSource, Service
+from app.services.anagrafica import ALIAS_MAX, LABEL_MAX
 from app.services.months import MAX_MONTHS, MIN_MONTHS, add_months, plan_renewal
 from app.services.text import customer_search_key
 
@@ -24,6 +25,10 @@ class LineDraft:
     reseller_id: int | None = None
     notes: str | None = None
     start_on: date | None = None
+    # Dati tecnici: sono i valori che l'owner copia nel pannello. Non creano
+    # righe `panel_lines`, che nascono dal sync quando il pannello le trova.
+    panel_external_id: str | None = None
+    panel_access_code: str | None = None
 
 
 def build_customer_and_line(draft: LineDraft, today: date) -> tuple[Customer, Line]:
@@ -34,18 +39,25 @@ def build_customer_and_line(draft: LineDraft, today: date) -> tuple[Customer, Li
     if draft.monthly_price_cents < 0:
         raise ValueError("il prezzo non può essere negativo")
 
+    label = draft.label.strip() if draft.label and draft.label.strip() else None
+    if label is not None and len(label) > LABEL_MAX:
+        raise ValueError(f"l'etichetta supera {LABEL_MAX} caratteri")
+    alias = draft.alias.strip() if draft.alias and draft.alias.strip() else None
+    if alias is not None and len(alias) > ALIAS_MAX:
+        raise ValueError(f"l'alias supera {ALIAS_MAX} caratteri")
+
     start = draft.start_on or today
     expires = add_months(start, draft.months, start.day)
 
     customer = Customer(
         name=draft.name.strip(),
-        alias=draft.alias.strip() if draft.alias and draft.alias.strip() else None,
-        search_key=customer_search_key(draft.name, draft.alias),
+        alias=alias,
+        search_key=customer_search_key(draft.name, alias),
         notes=draft.notes,
     )
     line = Line(
         customer=customer,
-        label=draft.label.strip() if draft.label and draft.label.strip() else None,
+        label=label,
         reseller_id=draft.reseller_id,
         service=draft.service,
         monthly_price_cents=draft.monthly_price_cents,

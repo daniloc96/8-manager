@@ -12,9 +12,9 @@ from telegram.ext import ContextTypes
 from app.bot import ui
 from app.config import get_settings
 from app.db import get_session_factory
-from app.models import Notification, ReviewException
+from app.models import Line, Notification, ReviewException
 from app.services.months import days_left
-from app.services.queries import active_lines, muted_line_ids
+from app.services.queries import muted_line_ids
 from app.services.review_exceptions import is_due
 
 logger = logging.getLogger(__name__)
@@ -61,11 +61,19 @@ async def build_reminder(
     async with session_factory() as session:
         muted = await muted_line_ids(session, today)
         due: list[tuple[int, str, str]] = []
-        for line in await active_lines(session):
+        flagged: list[tuple[int, str]] = []
+        flagged_ids: set[int] = set()
+        lines = list((await session.scalars(select(Line).where(Line.deleted_at.is_(None)))).all())
+        for line in lines:
             if line.id in muted:
                 continue
             if reseller_id is not None and line.reseller_id != reseller_id:
                 continue
+            # La marcatura si vede sempre, anche se la linea è lontana dalla
+            # scadenza: serve come promemoria di non rinnovare.
+            if line.no_renewal:
+                flagged_ids.add(line.id)
+                flagged.append((line.id, ui.line_title(line)))
             delta = days_left(line.expires_on, today)
             if delta < -1 or delta > warn_days:
                 continue
@@ -94,26 +102,41 @@ async def build_reminder(
 
         await session.commit()
 
-    if not due and not exceptions:
+    if not due and not exceptions and not flagged:
         return None
 
     body = [f"⏰ <b>Scadenze</b> · {ui.italian_date(today)}", ""]
     body.extend(f"• {ui.esc(title)} — {ui.esc(phrase)}" for _id, title, phrase in due)
+    if flagged:
+        body.append("")
+        body.append("<b>Da non rinnovare</b>")
+        body.extend(f"• {ui.esc(title)}" for _id, title in flagged)
     if exceptions:
         body.append("")
         body.append("<b>Eccezioni da rivedere</b>")
         body.extend(f"• linea {record.line_id} — {ui.esc(record.reason)}" for record in exceptions)
 
-    buttons = [
-        [
-            InlineKeyboardButton(
-                f"Rinnova {title.split(' · ')[0].split()[0]}",
-                callback_data=f"renew:{line_id}:pick",
-            )
-        ]
-        for line_id, title, _phrase in due[:8]
-    ]
+    buttons = []
+    for line_id, title, _phrase in due[:8]:
+        buttons.append(
+            [
+                InlineKeyboardButton(
+                    f"Rinnova {title.split(' · ')[0].split()[0]}",
+                    callback_data=f"renew:{line_id}:pick",
+                ),
+                InlineKeyboardButton(
+                    "🚫 Non rinnova" if line_id not in flagged_ids else "↩️ Rinnova lo stesso",
+                    callback_data=(
+                        f"nr:{line_id}:set" if line_id not in flagged_ids else f"nr:{line_id}:clear"
+                    ),
+                ),
+            ]
+        )
     buttons.append([InlineKeyboardButton("📅 Tutte le scadenze", callback_data="menu:due")])
+    if not due and flagged and not exceptions:
+        # Solo linee già marcate: resta utile vedere il promemoria.
+        body.append("")
+        body.append("<i>Nessun'altra scadenza da rinnovare.</i>")
     return "\n".join(body), InlineKeyboardMarkup(buttons)
 
 

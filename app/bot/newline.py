@@ -14,7 +14,9 @@ from app.bot import ui
 from app.bot.auth import access_for
 from app.config import get_settings
 from app.db import session_scope
-from app.models import Reseller, Service, Setting
+from app.models import Reseller, Service
+from app.services import settings as settings_service
+from app.services.anagrafica import ALIAS_MAX, LABEL_MAX
 from app.services.lines import LineDraft, create_customer_and_line
 from app.services.months import MAX_MONTHS, MIN_MONTHS
 from app.services.text import format_eur, normalize_key, parse_price_to_cents
@@ -34,6 +36,63 @@ def _state(context) -> dict:
 
 def _cancel_row() -> list[InlineKeyboardButton]:
     return [InlineKeyboardButton("✖️ Annulla", callback_data="new:cancel")]
+
+
+def _skip_row(field: str) -> list[InlineKeyboardButton]:
+    return [InlineKeyboardButton("⏭ Salta", callback_data=f"new:skip:{field}")]
+
+
+async def _ask_alias(query, state) -> None:
+    await query.edit_message_text(
+        f"🆕 <b>{ui.esc(state['name'])}</b>\n\n"
+        "Ha un alias? (es. «Mario il rosso»)\n"
+        "Serve per ritrovarlo in ricerca: puoi saltarlo.",
+        parse_mode=ParseMode.HTML,
+        reply_markup=InlineKeyboardMarkup([_skip_row("alias"), _cancel_row()]),
+    )
+
+
+async def _ask_label(query, state) -> None:
+    await query.edit_message_text(
+        f"🆕 <b>{ui.esc(state['name'])}</b>\n\n"
+        "Etichetta della linea? (es. «Linea 1»)\n"
+        "Se il cliente ha una sola linea puoi saltarla: resta «Linea unica».",
+        parse_mode=ParseMode.HTML,
+        reply_markup=InlineKeyboardMarkup([_skip_row("label"), _cancel_row()]),
+    )
+
+
+async def _ask_tech(query, state) -> None:
+    """Primo dato tecnico: ID nel pannello. Serve per il blocco da copiare."""
+    state["step"] = "tech_id"
+    await query.edit_message_text(
+        f"🆕 <b>{ui.esc(state['name'])}</b>\n\n"
+        "ID della linea nel pannello? (se lo hai già)\n"
+        "Puoi saltarlo: lo recupera il /sync quando la linea esiste.",
+        parse_mode=ParseMode.HTML,
+        reply_markup=InlineKeyboardMarkup([_skip_row("panel_external_id"), _cancel_row()]),
+    )
+
+
+async def _ask_tech_code(query, state) -> None:
+    state["step"] = "tech_code"
+    await query.edit_message_text(
+        f"🆕 <b>{ui.esc(state['name'])}</b>\n\n"
+        "Codice di accesso del pannello? (access code)\n"
+        "Puoi saltarlo.",
+        parse_mode=ParseMode.HTML,
+        reply_markup=InlineKeyboardMarkup([_skip_row("panel_access_code"), _cancel_row()]),
+    )
+
+
+async def _advance_tech(query, state, step: str) -> None:
+    """Dopo un dato tecnico: il successivo, oppure il riepilogo."""
+    if step == "tech_id":
+        await _ask_tech_code(query, state)
+        return
+    state["step"] = "confirm"
+    body, markup = _summary(state)
+    await query.edit_message_text(body, parse_mode=ParseMode.HTML, reply_markup=markup)
 
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -90,6 +149,10 @@ async def _ask_reseller(query, state) -> None:
     )
 
 
+def _ask_alias(query, state) -> None:
+    raise NotImplementedError
+
+
 def _ask_price(state) -> tuple[str, InlineKeyboardMarkup]:
     presets = get_settings().direct_price_presets_cents
     buttons = [
@@ -119,14 +182,20 @@ def _ask_months(state) -> tuple[str, InlineKeyboardMarkup]:
 def _summary(state) -> tuple[str, InlineKeyboardMarkup]:
     service = "Live + VOD" if state["service"] == "live_vod" else "Live"
     who = state.get("reseller_name") or "Diretto"
-    body = (
-        "🆕 <b>Riepilogo</b>\n\n"
-        f"Cliente: <b>{ui.esc(state['name'])}</b>\n"
+    body = f"🆕 <b>Riepilogo</b>\n\nCliente: <b>{ui.esc(state['name'])}</b>\n"
+    if state.get("alias"):
+        body += f"Alias: {ui.esc(state['alias'])}\n"
+    body += (
         f"Servizio: {service}\n"
+        f"Etichetta: {ui.esc(state.get('label') or 'Linea unica')}\n"
         f"Rivenditore: {ui.esc(who)}\n"
         f"Prezzo: {format_eur(state['price'])}/mese\n"
         f"Durata: {state['months']} mesi"
     )
+    if state.get("panel_external_id") or state.get("panel_access_code"):
+        body += "\n"
+        body += f"ID pannello: {ui.esc(state.get('panel_external_id') or '—')}\n"
+        body += f"Codice: {ui.esc(state.get('panel_access_code') or '—')}"
     return body, InlineKeyboardMarkup(
         [
             [InlineKeyboardButton("✅ Crea", callback_data="new:create")],
@@ -161,8 +230,8 @@ async def on_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
 
     if action.startswith("service:"):
         state["service"] = action.split(":", 1)[1]
-        state["step"] = "reseller"
-        await _ask_reseller(query, state)
+        state["step"] = "alias"
+        await _ask_alias(query, state)
         return
 
     if action.startswith("reseller:"):
@@ -173,9 +242,8 @@ async def on_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
             async with session_scope() as session:
                 reseller = await session.get(Reseller, state["reseller_id"])
                 state["reseller_name"] = reseller.name if reseller else None
-        state["step"] = "price"
-        body, markup = _ask_price(state)
-        await query.edit_message_text(body, parse_mode=ParseMode.HTML, reply_markup=markup)
+        state["step"] = "label"
+        await _ask_label(query, state)
         return
 
     if action.startswith("price:"):
@@ -189,9 +257,8 @@ async def on_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
             )
             return
         state["price"] = int(raw)
-        state["step"] = "months"
-        body, markup = _ask_months(state)
-        await query.edit_message_text(body, parse_mode=ParseMode.HTML, reply_markup=markup)
+        state["step"] = "tech"
+        await _ask_tech(query, state)
         return
 
     if action.startswith("months:"):
@@ -207,6 +274,12 @@ async def on_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
         state["step"] = "confirm"
         body, markup = _summary(state)
         await query.edit_message_text(body, parse_mode=ParseMode.HTML, reply_markup=markup)
+        return
+
+    if action.startswith("skip:"):
+        field = action.split(":", 1)[1]
+        state[field] = None
+        await _advance_tech(query, state, state["step"])
         return
 
     if action == "create":
@@ -236,6 +309,8 @@ async def _create(update: Update, context: ContextTypes.DEFAULT_TYPE, query) -> 
                     service=service,
                     monthly_price_cents=state["price"],
                     months=state["months"],
+                    alias=state.get("alias"),
+                    label=state.get("label"),
                     reseller_id=state.get("reseller_id"),
                     notes="Creato dal bot: da creare nel pannello",
                 ),
@@ -250,7 +325,7 @@ async def _create(update: Update, context: ContextTypes.DEFAULT_TYPE, query) -> 
         expires = line.expires_on
         line_id = line.id
         label = ui.line_title(line)
-        domain = await session.scalar(select(Setting).where(Setting.key == "vod_domain"))
+        domain = await settings_service.read_value(session, "vod_domain")
 
     context.user_data.pop("new_line", None)
 
@@ -264,12 +339,16 @@ async def _create(update: Update, context: ContextTypes.DEFAULT_TYPE, query) -> 
         f"password: <code>{password}</code>",
         f"durata: {state['months']} mesi",
     ]
-    if service is Service.LIVE_VOD and domain is not None:
+    if state.get("panel_external_id"):
+        body.append(f"ID pannello: <code>{ui.esc(state['panel_external_id'])}</code>")
+    if state.get("panel_access_code"):
+        body.append(f"codice: <code>{ui.esc(state['panel_access_code'])}</code>")
+    if service is Service.LIVE_VOD and domain:
         body.extend(
             [
                 "",
                 "<b>Link VOD da consegnare</b>",
-                f"<code>{ui.esc(domain.value)}/get.php?username={username}"
+                f"<code>{ui.esc(domain)}/get.php?username={username}"
                 f"&amp;password={password}</code>",
             ]
         )
@@ -327,15 +406,70 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE) -> boo
         )
         return True
 
+    if step == "alias":
+        value = _clean_optional(text)
+        if value is not None and len(value) > ALIAS_MAX:
+            await message.reply_html(f"L'alias supera {ALIAS_MAX} caratteri: accorcialo.")
+            return True
+        state["alias"] = value
+        state["step"] = "reseller"
+        async with session_scope() as session:
+            resellers = list(
+                (await session.scalars(select(Reseller).where(Reseller.active.is_(True)))).all()
+            )
+        rows = [[InlineKeyboardButton("Diretto (io)", callback_data="new:reseller:0")]]
+        rows.extend(
+            [InlineKeyboardButton(item.name, callback_data=f"new:reseller:{item.id}")]
+            for item in resellers
+        )
+        rows.append(_cancel_row())
+        await message.reply_html(
+            f"🆕 <b>{ui.esc(state['name'])}</b>\n\nA chi va la linea?",
+            reply_markup=InlineKeyboardMarkup(rows),
+        )
+        return True
+
+    if step == "label":
+        value = _clean_optional(text)
+        if value is not None and len(value) > LABEL_MAX:
+            await message.reply_html(f"L'etichetta supera {LABEL_MAX} caratteri: accorciala.")
+            return True
+        state["label"] = value
+        state["step"] = "price"
+        body, markup = _ask_price(state)
+        await message.reply_html(body, reply_markup=markup)
+        return True
+
+    if step == "tech_id":
+        state["panel_external_id"] = _clean_optional(text)
+        state["step"] = "tech_code"
+        await message.reply_html(
+            f"🆕 <b>{ui.esc(state['name'])}</b>\n\n"
+            "Codice di accesso del pannello? (access code)\nPuoi saltarlo.",
+            reply_markup=InlineKeyboardMarkup([_skip_row("panel_access_code"), _cancel_row()]),
+        )
+        return True
+
+    if step == "tech_code":
+        state["panel_access_code"] = _clean_optional(text)
+        state["step"] = "confirm"
+        body, markup = _summary(state)
+        await message.reply_html(body, reply_markup=markup)
+        return True
+
     if step == "price_text":
         cents = parse_price_to_cents(text)
         if cents is None:
             await message.reply_html("Prezzo non valido: scrivi per esempio <code>5</code>.")
             return True
         state["price"] = cents
-        state["step"] = "months"
-        body, markup = _ask_months(state)
-        await message.reply_html(body, reply_markup=markup)
+        state["step"] = "tech"
+        await message.reply_html(
+            f"🆕 <b>{ui.esc(state['name'])}</b>\n\n"
+            "ID della linea nel pannello? (se lo hai già)\n"
+            "Puoi saltarlo: lo recupera il /sync quando la linea esiste.",
+            reply_markup=InlineKeyboardMarkup([_skip_row("panel_external_id"), _cancel_row()]),
+        )
         return True
 
     if step == "months_text":
@@ -343,9 +477,26 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE) -> boo
             await message.reply_html(f"Scrivi un numero di mesi tra {MIN_MONTHS} e {MAX_MONTHS}.")
             return True
         state["months"] = int(text)
-        state["step"] = "confirm"
-        body, markup = _summary(state)
-        await message.reply_html(body, reply_markup=markup)
+        # Durata scelta direttamente: restano i dati tecnici prima del riepilogo.
+        await _ask_tech_via_message(message, state)
         return True
 
     return False
+
+
+def _clean_optional(text: str) -> str | None:
+    """`-` o vuoto significano «non impostato»."""
+    cleaned = " ".join(text.split())
+    if cleaned in {"", "-"}:
+        return None
+    return cleaned
+
+
+async def _ask_tech_via_message(message, state) -> None:
+    state["step"] = "tech_id"
+    await message.reply_html(
+        f"🆕 <b>{ui.esc(state['name'])}</b>\n\n"
+        "ID della linea nel pannello? (se lo hai già)\n"
+        "Puoi saltarlo: lo recupera il /sync quando la linea esiste.",
+        reply_markup=InlineKeyboardMarkup([_skip_row("panel_external_id"), _cancel_row()]),
+    )

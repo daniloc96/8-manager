@@ -19,12 +19,14 @@ from app.bot import (
     common,
     customer,
     editline,
+    flagged,
     lines,
     menu,
     newline,
     panels,
     reseller,
     search,
+    settings_bot,
 )
 from app.config import get_settings
 from app.db import dispose_engine
@@ -118,6 +120,8 @@ def build_application() -> Application:
     )
     application.add_handler(CallbackQueryHandler(editline.on_callback, pattern=r"^edit:"))
     application.add_handler(CallbackQueryHandler(customer.on_callback, pattern=r"^cust:"))
+    application.add_handler(CallbackQueryHandler(settings_bot.on_callback, pattern=r"^set:"))
+    application.add_handler(CallbackQueryHandler(flagged.on_callback, pattern=r"^nr:"))
     application.add_handler(
         CallbackQueryHandler(reseller.on_callback, pattern=r"^(rq|rqm|rqa|rqr|auth):")
     )

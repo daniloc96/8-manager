@@ -44,7 +44,7 @@ sui pannelli: il bot legge soltanto.
 ├── Nuovo cliente       (cliente + prima linea)
 ├── Incassi             (mese corrente per rivenditore + valore del parco)
 ├── Rivenditori
-└── Impostazioni        (dominio VOD)
+└── Impostazioni        (dominio VOD, modificabile)
 ```
 
 ### Ricerca
@@ -131,14 +131,15 @@ mostrata nella scheda.
 
 ### Nuova linea (bot-first)
 
-1. nome + alias;
-2. rivenditore o diretto;
-3. servizio (Live / Live+VOD);
-4. etichetta ("Linea 1", "Linea 2", vuota = "Linea unica");
-5. dati tecnici: ID pannello, codice live, link VOD (solo Live+VOD);
+1. nome del cliente;
+2. servizio (Live / Live+VOD);
+3. alias (si può saltare);
+4. rivenditore o diretto;
+5. etichetta ("Linea 1", "Linea 2", saltata = "Linea unica");
 6. prezzo mensile;
 7. durata iniziale;
-8. riepilogo e conferma.
+8. dati tecnici: ID pannello (si può saltare), codice di accesso (si può saltare);
+9. riepilogo e conferma.
 
 Alla fine il bot mostra il blocco da copiare nel pannello:
 
