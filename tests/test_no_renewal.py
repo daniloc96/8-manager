@@ -240,3 +240,18 @@ async def test_renewal_clears_the_flag(session, engine) -> None:
         )
         assert audit is not None
         assert audit.payload["reason"] == "renewed"
+
+
+async def test_flagged_line_far_from_expiry_has_a_button(session, engine) -> None:
+    """Una linea marcata lontana dalla scadenza deve restare smarcabile."""
+    line = await _line(session, expires_on=date(2027, 6, 1))
+    line_id = line.id
+    await _flag(engine, line_id)
+
+    factory = async_sessionmaker(engine, expire_on_commit=False)
+    built = await build_reminder(TODAY, chat_id=OWNER_ID, factory=factory)
+
+    assert built is not None
+    _body, markup = built
+    datas = [button.callback_data for row in markup.inline_keyboard for button in row]
+    assert f"nr:{line_id}:clear" in datas

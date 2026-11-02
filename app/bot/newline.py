@@ -208,7 +208,10 @@ def _summary(state) -> tuple[str, InlineKeyboardMarkup]:
     )
     if state.get("panel_external_id") or state.get("panel_access_code"):
         body += "\n"
-        body += f"ID pannello: {ui.esc(state.get('panel_external_id') or '—')}\n"
+        # Non sono dati da salvare: servono a creare il conto nel pannello,
+        # che resta la fonte della verità e li riporta al primo sync.
+        body += "<i>Da copiare nel pannello (non salvati)</i>\n"
+        body += f"ID: {ui.esc(state.get('panel_external_id') or '—')}\n"
         body += f"Codice: {ui.esc(state.get('panel_access_code') or '—')}"
     return body, InlineKeyboardMarkup(
         [

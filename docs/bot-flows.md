@@ -74,6 +74,7 @@ scade il 13/11/2026 (tra 11 giorni)
 
 [✅ Rinnova] [💶 Prezzo]
 [✏️ Modifica]
+[🚫 Non rinnovare]
 [🕘 Storico] [👤 Cliente]
 [🔎 Cerca]
 [🏠 Menu]
@@ -103,31 +104,33 @@ alias: "Mario il rosso"
 [Linea 1 · 13/11] [Linea 2 · 01/12] [Linea 3 · 01/01]
 ```
 
-### Rinnovo con "Fatto"
+### Rinnovo
 
-Il rinnovo avviene nel pannello. Il bot registra e, se richiesto, avvisa.
+Il rinnovo si registra dal bot; il conto sul pannello lo rinnova l'owner a mano.
 
 ```
-⏰ Scade oggi
-Mario Caterino · Linea 1 · Live + VOD · 5,00 €/mese
-
-[Rinnovato 1 mese] [2] [3]
-[5] [12] [Altro]
-[Non rinnova]
+[✅ Rinnova]  ->  [1 m] [2 m] [3 m]
+                  [5 m] [12 m] [Altro…]
+                  [⬅️ Annulla]
 ```
 
-Dopo il tap:
+**Altro…** chiede i mesi come testo (1–36) e ha «Annulla» per tornare alla
+scheda; aprire la scheda o il menu annulla l'attesa, quindi un numero digitato
+dopo non rinnova più nulla.
 
-1. calcola la nuova scadenza (dal giorno del rinnovo se scaduta, dalla
-   scadenza corrente se attiva);
-2. salva il rinnovo con prezzo e totale;
-3. mostra `[Annulla]` per qualche minuto;
-4. invia la conferma all'owner e al rivenditore, nel gruppo se esiste,
-   altrimenti in privato.
+Dopo il tap con i mesi:
 
-La linea resta `in attesa di conferma pannello` per 48 ore; al sync successivo
-la data del pannello è quella che vince, e l'eventuale differenza viene
-mostrata nella scheda.
+1. calcola la nuova scadenza: dal giorno del rinnovo se la linea è scaduta,
+   dalla scadenza corrente se è ancora attiva;
+2. salva il rinnovo con prezzo e totale, e azzera l'eventuale marcatura
+   «non rinnovare», con voce in `audit_log`;
+3. risponde con la nuova data e il pulsante **↩️ Annulla**, valido 15 minuti;
+4. l'annullamento riporta scadenza, giorno di ancoraggio e prezzo ai valori
+   precedenti.
+
+La linea non resta «in attesa di conferma»: la data del bot è quella che conta
+finché un `/sync` non trova sul pannello una data diversa, e in quel caso vince
+quella del pannello.
 
 ### Nuova linea (bot-first)
 

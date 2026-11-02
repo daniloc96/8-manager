@@ -199,3 +199,46 @@ async def test_callback_rejects_unknown_user(session, bot_session_factory) -> No
     await customer_bot.on_callback(update, SimpleNamespace(user_data={}, bot=None))
 
     assert query.text == "Non sei autorizzato."
+
+
+async def test_reseller_does_not_see_other_lines_count(session) -> None:
+    """Al rivenditore non si dice quante linee dello stesso cliente esistono."""
+    from app.bot import ui
+    from app.services.queries import customer_overview
+
+    customer = Customer(name="Mario Rossi", search_key=customer_search_key("Mario Rossi"))
+    mine_reseller = Reseller(name="Mio", name_key="mio", active=True)
+    other = Reseller(name="Altro", name_key="altro", active=True)
+    session.add_all([customer, mine_reseller, other])
+    await session.commit()
+
+    mine = Line(
+        customer=customer,
+        service=Service.LIVE,
+        monthly_price_cents=500,
+        started_on=date(2025, 1, 1),
+        expires_on=date(2027, 1, 1),
+        anchor_day=1,
+        reseller_id=mine_reseller.id,
+    )
+    # Una seconda linea dello stesso cliente, di un altro rivenditore.
+    theirs = Line(
+        customer=customer,
+        service=Service.LIVE,
+        monthly_price_cents=700,
+        started_on=date(2025, 1, 1),
+        expires_on=date(2027, 1, 1),
+        anchor_day=1,
+        reseller_id=other.id,
+    )
+    session.add_all([mine, theirs])
+    await session.commit()
+
+    overview = await customer_overview(session, customer.id, reseller_id=mine_reseller.id)
+    assert overview is not None
+
+    reseller_view = ui.customer_card(overview, date(2026, 11, 2), show_hidden=False)
+    owner_view = ui.customer_card(overview, date(2026, 11, 2), show_hidden=True)
+
+    assert "non visibil" not in reseller_view
+    assert "non visibil" in owner_view

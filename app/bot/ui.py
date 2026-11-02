@@ -85,7 +85,7 @@ def line_card(line: Line, today: date) -> str:
     if getattr(line, "no_renewal", False):
         parts.append("🚫 <b>Da non rinnovare</b>")
     if line.notes:
-        parts.append(f"_{esc(line.notes)}_")
+        parts.append(f"<i>{esc(line.notes)}</i>")
     return "\n".join(parts)
 
 
@@ -121,6 +121,16 @@ def line_keyboard(line: Line, *, is_owner: bool, is_reseller: bool = False) -> I
             ]
         )
         rows.append([InlineKeyboardButton("✏️ Modifica", callback_data=f"edit:{line.id}")])
+        # La marcatura si mette e si toglie anche qui: il reminder da solo non
+        # basta per una linea lontana dalla scadenza.
+        if getattr(line, "no_renewal", False):
+            rows.append(
+                [InlineKeyboardButton("↩️ Togli «non rinnova»", callback_data=f"nr:{line.id}:clear")]
+            )
+        else:
+            rows.append(
+                [InlineKeyboardButton("🚫 Non rinnovare", callback_data=f"nr:{line.id}:set")]
+            )
     rows.append(
         [
             InlineKeyboardButton("🕘 Storico", callback_data=f"history:{line.id}"),
@@ -186,8 +196,12 @@ def results_keyboard(lines: list[Line], today: date) -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(rows)
 
 
-def customer_card(overview: CustomerOverview, today: date) -> str:
-    """Scheda cliente: tutte le linee attive con il totale mensile."""
+def customer_card(overview: CustomerOverview, today: date, *, show_hidden: bool = True) -> str:
+    """Scheda cliente: tutte le linee attive con il totale mensile.
+
+    A un rivenditore non si dice quante linee dello stesso cliente esistono
+    fuori dalla sua vista: è un dato che non gli serve.
+    """
     customer = overview.customer
     parts = [f"👤 <b>{esc(customer.name)}</b>"]
     if customer.alias:
@@ -197,7 +211,7 @@ def customer_card(overview: CustomerOverview, today: date) -> str:
     parts.append(
         f"<b>{overview.active_lines} {word}</b> · {format_eur(overview.monthly_cents)}/mese"
     )
-    if overview.hidden_lines:
+    if show_hidden and overview.hidden_lines:
         hidden = "linea non visibile" if overview.hidden_lines == 1 else "linee non visibili"
         parts.append(f"<i>{overview.hidden_lines} {hidden} a te</i>")
 

@@ -117,6 +117,20 @@ async def build_reminder(
         body.extend(f"• linea {record.line_id} — {ui.esc(record.reason)}" for record in exceptions)
 
     buttons = []
+    # Le linee marcate ma lontane dalla scadenza non entrano in `due`: senza
+    # questi pulsanti resterebbero smarcabili solo a mano sul database.
+    due_ids = {line_id for line_id, _title, _phrase in due[:8]}
+    for line_id, title in flagged[:8]:
+        if line_id in due_ids:
+            continue
+        short = title.split(" · ")[0]
+        buttons.append(
+            [
+                InlineKeyboardButton(
+                    f"↩️ Togli il segno · {short}", callback_data=f"nr:{line_id}:clear"
+                )
+            ]
+        )
     for line_id, title, _phrase in due[:8]:
         buttons.append(
             [
@@ -125,7 +139,7 @@ async def build_reminder(
                     callback_data=f"renew:{line_id}:pick",
                 ),
                 InlineKeyboardButton(
-                    "🚫 Non rinnova" if line_id not in flagged_ids else "↩️ Rinnova lo stesso",
+                    "🚫 Non rinnova" if line_id not in flagged_ids else "↩️ Togli il segno",
                     callback_data=(
                         f"nr:{line_id}:set" if line_id not in flagged_ids else f"nr:{line_id}:clear"
                     ),

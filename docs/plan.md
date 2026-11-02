@@ -121,7 +121,9 @@ Bot (owner):
   **🚫 Non rinnova**, con conferma prima di scrivere. La marcatura non tocca
   il pannello: è un promemoria che resta nel reminder delle 09:00 (anche se la
   linea è lontana dalla scadenza) e si vede sulla scheda. Si annulla con
-  **↩️ Rinnova lo stesso** dal reminder o rinnovando la linea.
+  **↩️ Togli il segno** dal reminder o dalla scheda, oppure rinnovando la linea
+  (il rinnovo azzera la marcatura con una voce in `audit_log`). Il reminder ha
+  un pulsante anche per le linee marcate lontane dalla scadenza.
 
 Job:
 
@@ -185,7 +187,7 @@ Debito tecnico noto:
 ```bash
 uv sync                                  # dipendenze
 uv run ruff check . && uv run ruff format --check .
-uv run pytest -q                         # 204 test al 2026-11-02
+uv run pytest -q                         # 216 test al 2026-11-03
 ./scripts/deploy.sh --apply              # produzione
 ./scripts/verify.sh
 ```

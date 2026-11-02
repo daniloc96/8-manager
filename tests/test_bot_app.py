@@ -32,16 +32,36 @@ def test_build_application_registers_handlers(monkeypatch) -> None:
         get_settings.cache_clear()
 
 
-def test_menu_and_line_callbacks_are_disjoint() -> None:
-    """I pattern dei CallbackQueryHandler non devono sovrapporsi."""
-    import re
+def _callback_patterns(monkeypatch):
+    """I pattern veri, presi dall'applicazione costruita.
 
-    menu = re.compile(r"^menu:")
-    line = re.compile(r"^(card|renew|undo|price|history|off):")
-    request = re.compile(r"^(rq|rqm|rqa|rqr|auth):")
-    wizard = re.compile(r"^new:")
-    edit = re.compile(r"^edit:")
-    cliente = re.compile(r"^cust:")
+    Prima questo test ricopiava le regex a mano: una regressione nel routing
+    sarebbe passata lo stesso (e c'era un `off:` che in `main.py` non esiste).
+    """
+    monkeypatch.setenv("BOT_TOKEN", "123456:TEST-TOKEN")
+    monkeypatch.setenv("OWNER_TELEGRAM_ID", "42")
+    get_settings.cache_clear()
+    try:
+        from telegram.ext import CallbackQueryHandler
+
+        from app.main import build_application
+
+        application = build_application()
+    finally:
+        get_settings.cache_clear()
+
+    patterns = []
+    for group in application.handlers.values():
+        for handler in group:
+            if isinstance(handler, CallbackQueryHandler) and handler.pattern is not None:
+                patterns.append(handler.pattern)
+    return patterns
+
+
+def test_every_callback_matches_exactly_one_handler(monkeypatch) -> None:
+    """I pattern dei CallbackQueryHandler non devono sovrapporsi."""
+    patterns = _callback_patterns(monkeypatch)
+    assert len(patterns) >= 6
 
     samples = [
         "menu:home",
@@ -49,11 +69,12 @@ def test_menu_and_line_callbacks_are_disjoint() -> None:
         "card:12",
         "renew:12:pick",
         "renew:12:3",
+        "renew:12:other",
         "undo:44",
         "price:12",
         "history:12",
-        "off:12:ask",
-        "off:12:yes",
+        "nr:12:set",
+        "nr:12:clear",
         "rq:12",
         "rqm:12:3",
         "rqa:5:3",
@@ -61,18 +82,12 @@ def test_menu_and_line_callbacks_are_disjoint() -> None:
         "auth:777:yes",
         "new:create",
         "new:service:live_vod",
+        "new:skip:alias",
         "edit:12",
         "edit:12:alias",
         "edit:12:code:live_hallo",
         "cust:5",
     ]
     for data in samples:
-        matches = [
-            bool(menu.match(data)),
-            bool(line.match(data)),
-            bool(request.match(data)),
-            bool(wizard.match(data)),
-            bool(edit.match(data)),
-            bool(cliente.match(data)),
-        ]
-        assert sum(matches) == 1, data
+        matches = [pattern for pattern in patterns if pattern.match(data)]
+        assert len(matches) == 1, f"{data} matcha {len(matches)} handler"

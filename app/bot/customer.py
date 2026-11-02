@@ -50,7 +50,7 @@ async def on_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
         if not overview.lines:
             await query.edit_message_text("Nessuna linea di questo cliente a te disponibile.")
             return
-        body = ui.customer_card(overview, _today())
+        body = ui.customer_card(overview, _today(), show_hidden=access.is_owner)
         markup = ui.customer_keyboard(overview)
 
     await query.edit_message_text(body, parse_mode=ParseMode.HTML, reply_markup=markup)

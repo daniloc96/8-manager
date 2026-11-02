@@ -79,6 +79,13 @@ def _tech_picker(line) -> tuple[str, InlineKeyboardMarkup]:
                 ),
             ]
         )
+    body.extend(
+        [
+            "",
+            "<i>Il pannello vince: se lo conosce, il prossimo /sync riporta "
+            "ID e codice ai suoi valori.</i>",
+        ]
+    )
     rows.append([InlineKeyboardButton("⬅️ Modifica", callback_data=f"edit:{line.id}")])
     return "\n".join(body), InlineKeyboardMarkup(rows)
 

@@ -44,6 +44,11 @@ async def send_card(
     if query is not None:
         await query.answer()
 
+    # Aprire una scheda è una navigazione: l'input in attesa (mesi o prezzo)
+    # decade qui, altrimenti il numero digitato dopo un «Annulla» finirebbe
+    # nel flusso abbandonato.
+    context.user_data.pop("awaiting", None)
+
     async with session_scope() as session:
         access = await access_for(update, session)
         line = await get_line(session, line_id)
@@ -208,6 +213,8 @@ async def _apply_renewal(
 async def undo(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     query = update.callback_query
     if query is None or query.data is None:
+        return
+    if not await _owner_only(update, query):
         return
     _, raw_renewal = query.data.split(":", 1)
     renewal_id = int(raw_renewal)

@@ -25,10 +25,6 @@ class LineDraft:
     reseller_id: int | None = None
     notes: str | None = None
     start_on: date | None = None
-    # Dati tecnici: sono i valori che l'owner copia nel pannello. Non creano
-    # righe `panel_lines`, che nascono dal sync quando il pannello le trova.
-    panel_external_id: str | None = None
-    panel_access_code: str | None = None
 
 
 def build_customer_and_line(draft: LineDraft, today: date) -> tuple[Customer, Line]:

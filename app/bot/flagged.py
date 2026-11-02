@@ -83,7 +83,7 @@ async def on_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
             f"🚫 <b>Segnata come da non rinnovare</b>\n\n{ui.esc(title)}\n"
             f"Scade il {ui.italian_date(expires)}.\n\n"
             "La troverai nel reminder finché non scade. Rinnovare la linea "
-            "toglie la marcatura, oppure usa <b>Rinnova lo stesso</b> qui."
+            "toglie la marcatura, oppure usa <b>↩️ Togli il segno</b> qui."
         )
     elif changed:
         body = f"↩️ <b>Marcatura tolta</b>\n\n{ui.esc(title)}\nScade il {ui.italian_date(expires)}."

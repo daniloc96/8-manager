@@ -403,6 +403,8 @@ async def on_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
     if data == "menu:request":
         from app.bot.reseller import ask_which_line
 
+        # «Indietro» dal picker mesi: l'attesa di un numero decade.
+        context.user_data.pop("awaiting", None)
         await ask_which_line(update, context)
         return
 
