@@ -52,10 +52,12 @@ sui pannelli: il bot legge soltanto.
 I risultati sono **linee**, non clienti.
 
 ```
-🔎 "mario" — 3 risultati
-• Mario Caterino · Linea 1 — scade 13/11 (tra 12 giorni)
-• Mario Caterino · Linea 2 — scade 28/11 (tra 27 giorni)
-• Mario Rossi · Linea unica — scaduta il 02/10
+🔎 «mario» — 3 risultati
+• Mario Caterino · Linea 1 — scade il 13/11/2026 (tra 11 giorni) · 5,00 €
+• Mario Caterino · Linea 2 — scade il 28/11/2026 (tra 26 giorni) · 6,00 €
+• Mario Rossi · Linea unica — scaduta il 02/10/2026 (31 giorni fa) · 5,00 €
+
+[👤 Mario Caterino · 2 linee]
 ```
 
 Un tap apre la scheda della linea. Se il cliente ha più linee, la scheda
