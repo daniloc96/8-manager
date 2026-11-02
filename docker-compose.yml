@@ -1,0 +1,20 @@
+name: eight-manager-dev
+
+services:
+  bot:
+    build:
+      context: .
+    image: eight-manager-bot:dev
+    container_name: eight-manager-bot-dev
+    env_file:
+      # raw: i segreti possono contenere '$' senza interpolazione Compose.
+      - path: .env
+        format: raw
+    volumes:
+      - ./data:/data
+    restart: "no"
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"

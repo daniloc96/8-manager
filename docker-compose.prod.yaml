@@ -1,0 +1,27 @@
+name: eight-manager
+
+services:
+  bot:
+    build:
+      context: .
+    image: eight-manager-bot:latest
+    container_name: eight-manager-bot
+    env_file:
+      # raw: i segreti possono contenere '$' senza interpolazione Compose.
+      - path: .env
+        format: raw
+    volumes:
+      - ./data:/data
+    restart: unless-stopped
+    stop_grace_period: 20s
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+    healthcheck:
+      test: ["CMD", "python", "-m", "app.healthcheck"]
+      interval: 60s
+      timeout: 10s
+      start_period: 30s
+      retries: 3

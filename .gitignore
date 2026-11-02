@@ -1,0 +1,23 @@
+# Segreti: solo le copie cifrate entrano in git.
+.env
+.env.*.tmp
+.sops/
+age-key.txt
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+.pytest_cache/
+.ruff_cache/
+*.egg-info/
+
+# Dati runtime
+data/
+heartbeat
+
+# Tooling
+.playwright-mcp/
+.DS_Store
+.idea/
+.vscode/

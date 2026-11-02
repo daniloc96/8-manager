@@ -1,0 +1,16 @@
+.git
+.gitignore
+.env
+.env.*
+.sops
+secrets
+data
+tests
+docs
+scripts
+.playwright-mcp
+.pytest_cache
+.ruff_cache
+.venv
+__pycache__
+*.md

@@ -1,0 +1,18 @@
+# SOPS configuration for 8-manager.
+#
+# One age identity for the whole fleet. The private half never enters git:
+# it lives in .sops/keys.txt (gitignored, 0600) and in the owner's password
+# manager. Only the recipient below is public.
+#
+# Encrypt:  ./scripts/encrypt.sh
+# Decrypt:  ./scripts/decrypt.sh
+creation_rules:
+  # Environment file for the single deployment environment.
+  - path_regex: (^|/)\.env(\.enc)?$
+    age: >-
+      age1lhdzxavslx9k97j3meuttvmfq0ru3k2qkuu2ees9q968t8jpruesd9mwn3
+
+  # SSH private key for the Hetzner personal VPS (deployer user).
+  - path_regex: (^|/)secrets/ssh/[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+(\.enc)?$
+    age: >-
+      age1lhdzxavslx9k97j3meuttvmfq0ru3k2qkuu2ees9q968t8jpruesd9mwn3
