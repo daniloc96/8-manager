@@ -7,7 +7,7 @@ from telegram import InlineKeyboardButton, InlineKeyboardMarkup
 
 from app.models import Line, Platform, Service
 from app.services.months import days_left
-from app.services.queries import panel_for
+from app.services.queries import CustomerOverview, panel_for
 from app.services.text import format_eur
 
 SERVICE_LABELS = {
@@ -118,12 +118,14 @@ def line_keyboard(line: Line, *, is_owner: bool, is_reseller: bool = False) -> I
                 InlineKeyboardButton("💶 Prezzo", callback_data=f"price:{line.id}"),
             ]
         )
+        rows.append([InlineKeyboardButton("✏️ Modifica", callback_data=f"edit:{line.id}")])
     rows.append(
         [
             InlineKeyboardButton("🕘 Storico", callback_data=f"history:{line.id}"),
-            InlineKeyboardButton("🔎 Cerca", callback_data="menu:search"),
+            InlineKeyboardButton("👤 Cliente", callback_data=f"cust:{line.customer_id}"),
         ]
     )
+    rows.append([InlineKeyboardButton("🔎 Cerca", callback_data="menu:search")])
     if is_reseller:
         rows.append([InlineKeyboardButton("🔁 Richiedi rinnovo", callback_data=f"rq:{line.id}")])
     rows.append([InlineKeyboardButton("🏠 Menu", callback_data="menu:home")])
@@ -159,6 +161,71 @@ def results_keyboard(lines: list[Line], today: date) -> InlineKeyboardMarkup:
             )
         ]
         for line in lines
+    ]
+
+    # Quando un cliente ha più linee nei risultati, offre la scheda unica.
+    counts: dict[int, int] = {}
+    names: dict[int, str] = {}
+    for line in lines:
+        counts[line.customer_id] = counts.get(line.customer_id, 0) + 1
+        names[line.customer_id] = line.customer.name
+    for customer_id, count in counts.items():
+        if count > 1:
+            rows.append(
+                [
+                    InlineKeyboardButton(
+                        f"👤 {names[customer_id]} · {count} linee",
+                        callback_data=f"cust:{customer_id}",
+                    )
+                ]
+            )
+
+    rows.append([InlineKeyboardButton("🏠 Menu", callback_data="menu:home")])
+    return InlineKeyboardMarkup(rows)
+
+
+def customer_card(overview: CustomerOverview, today: date) -> str:
+    """Scheda cliente: tutte le linee attive con il totale mensile."""
+    customer = overview.customer
+    parts = [f"👤 <b>{esc(customer.name)}</b>"]
+    if customer.alias:
+        parts.append(f'alias: "{esc(customer.alias)}"')
+
+    word = "linea attiva" if overview.active_lines == 1 else "linee attive"
+    parts.append(
+        f"<b>{overview.active_lines} {word}</b> · {format_eur(overview.monthly_cents)}/mese"
+    )
+    if overview.hidden_lines:
+        hidden = "linea non visibile" if overview.hidden_lines == 1 else "linee non visibili"
+        parts.append(f"<i>{overview.hidden_lines} {hidden} a te</i>")
+
+    if overview.lines:
+        parts.append("")
+        for line in overview.lines:
+            label = line.label or "Linea unica"
+            parts.append(
+                f"• {esc(label)} — {esc(expiry_phrase(line, today))} · "
+                f"{format_eur(line.monthly_price_cents)}"
+            )
+    else:
+        parts.append("")
+        parts.append("Nessuna linea attiva.")
+
+    if customer.notes:
+        parts.append("")
+        parts.append(f"_{esc(customer.notes)}_")
+    return "\n".join(parts)
+
+
+def customer_keyboard(overview: CustomerOverview) -> InlineKeyboardMarkup:
+    rows = [
+        [
+            InlineKeyboardButton(
+                f"{line.label or 'Linea unica'} · {line.expires_on:%d/%m}",
+                callback_data=f"card:{line.id}",
+            )
+        ]
+        for line in overview.lines
     ]
     rows.append([InlineKeyboardButton("🏠 Menu", callback_data="menu:home")])
     return InlineKeyboardMarkup(rows)

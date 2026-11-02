@@ -40,6 +40,8 @@ def test_menu_and_line_callbacks_are_disjoint() -> None:
     line = re.compile(r"^(card|renew|undo|price|history|off):")
     request = re.compile(r"^(rq|rqm|rqa|rqr|auth):")
     wizard = re.compile(r"^new:")
+    edit = re.compile(r"^edit:")
+    cliente = re.compile(r"^cust:")
 
     samples = [
         "menu:home",
@@ -59,6 +61,10 @@ def test_menu_and_line_callbacks_are_disjoint() -> None:
         "auth:777:yes",
         "new:create",
         "new:service:live_vod",
+        "edit:12",
+        "edit:12:alias",
+        "edit:12:code:live_hallo",
+        "cust:5",
     ]
     for data in samples:
         matches = [
@@ -66,5 +72,7 @@ def test_menu_and_line_callbacks_are_disjoint() -> None:
             bool(line.match(data)),
             bool(request.match(data)),
             bool(wizard.match(data)),
+            bool(edit.match(data)),
+            bool(cliente.match(data)),
         ]
         assert sum(matches) == 1, data

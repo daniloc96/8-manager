@@ -15,7 +15,17 @@ from telegram.ext import (
 )
 
 from app import __version__
-from app.bot import common, lines, menu, newline, panels, reseller, search
+from app.bot import (
+    common,
+    customer,
+    editline,
+    lines,
+    menu,
+    newline,
+    panels,
+    reseller,
+    search,
+)
 from app.config import get_settings
 from app.db import dispose_engine
 from app.jobs.backup import backup_job
@@ -106,6 +116,8 @@ def build_application() -> Application:
     application.add_handler(
         CallbackQueryHandler(lines.on_callback, pattern=r"^(card|renew|undo|price|history):")
     )
+    application.add_handler(CallbackQueryHandler(editline.on_callback, pattern=r"^edit:"))
+    application.add_handler(CallbackQueryHandler(customer.on_callback, pattern=r"^cust:"))
     application.add_handler(
         CallbackQueryHandler(reseller.on_callback, pattern=r"^(rq|rqm|rqa|rqr|auth):")
     )

@@ -29,8 +29,13 @@ def _today():
     return datetime.now(ZoneInfo(get_settings().tz)).date()
 
 
-def _target(update: Update):
-    """Dove scrivere: modifica il messaggio del bottone o risponde al testo."""
+async def _target(update: Update):
+    """Dove scrivere: modifica il messaggio del bottone o risponde al testo.
+
+    È `async` perché i chiamanti fanno `await _target(update)`: restituisce il
+    metodo (già legato) da invocare, e attenderlo qui evita di await-are un
+    metodo sincrono, che solleva TypeError.
+    """
     query = update.callback_query
     if query is not None:
         return query.edit_message_text
@@ -249,6 +254,12 @@ async def show_income(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
             body.append(f"• {ui.esc(who)} — {row.renewals} rinnovi · {format_eur(row.total_cents)}")
         body.append("")
         body.append(f"<b>Totale: {format_eur(report.total_cents)}</b>")
+
+    body.append("")
+    body.append(
+        f"📦 Parco: <b>{report.active_lines} linee attive</b> · "
+        f"{format_eur(report.monthly_cents)}/mese"
+    )
 
     await target(
         "\n".join(body),

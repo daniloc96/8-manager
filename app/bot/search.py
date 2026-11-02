@@ -75,10 +75,14 @@ async def on_text(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         return
     if chat.type != "private":
         return
+    from app.bot.editline import handle_text as handle_edit_text
     from app.bot.newline import handle_text as handle_new_text
     from app.bot.reseller import handle_request_text
 
     if await handle_new_text(update, context):
+        return
+
+    if await handle_edit_text(update, context):
         return
 
     pending = context.user_data.get("awaiting")

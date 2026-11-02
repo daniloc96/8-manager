@@ -235,6 +235,31 @@ async def test_active_lines_count(session) -> None:
     assert active == 3
 
 
+async def test_income_report_includes_portfolio_value(session) -> None:
+    """Il parco conta le linee attive e somma i prezzi, ignorando le disattivate."""
+    _mario, _anna, _reseller, lines = await _seed(session)
+    lines[2].deleted_at = datetime.now(UTC)
+    await session.flush()
+
+    report = await income_report(session, 2026, 11)
+
+    # 4 linee da 500 centesimi meno quella disattivata.
+    assert report.active_lines == 3
+    assert report.monthly_cents == 1500
+    # Il parco non dipende dai rinnovi: nessun rinnovo in questo mese.
+    assert report.rows == []
+    assert report.total_cents == 0
+
+
+async def test_income_report_portfolio_survives_empty_month(session) -> None:
+    await _seed(session)
+
+    report = await income_report(session, 2030, 1)
+
+    assert report.active_lines == 4
+    assert report.monthly_cents == 2000
+
+
 async def test_restore_line_reactivates(session) -> None:
     from datetime import UTC, datetime
 

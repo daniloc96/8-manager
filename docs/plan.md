@@ -1,6 +1,6 @@
 # Piano di lavoro — 8-manager
 
-Ultimo aggiornamento: **2026-11-03 (notte)**.
+Ultimo aggiornamento: **2026-11-02 (notte)**.
 Questo file è il punto di partenza per chi riprende il lavoro: stato reale,
 decisioni già prese, cosa manca e come si mette in produzione una modifica.
 
@@ -89,10 +89,19 @@ Bot (owner):
 
 - `/start` menu con tastiera, `/scadenze` (scadute, oggi, prossimi 3 giorni),
   `/cerca`, `/nuovo` (wizard cliente+linea con credenziali da copiare),
-  `/incassi` (rinnovi del mese per rivenditore), `/status`, `/sync`,
+  `/incassi` (rinnovi del mese per rivenditore **e valore del parco**: linee
+  attive × prezzo mensile), `/status`, `/sync`,
   `/sync importa`, `/id`, `/help`;
 - scheda linea: rinnovo 1/2/3/5/12 mesi o importo libero con **Annulla** per
-  15 minuti, **Prezzo** modificabile, **Storico**;
+  15 minuti, **Prezzo** modificabile, **Storico**, **Cliente**;
+- **Modifica** anagrafica dalla scheda, un campo alla volta: alias del cliente,
+  etichetta della linea, note, ID pannello e codice della riga di pannello.
+  `-` svuota il campo; un'etichetta già usata da un'altra linea dello stesso
+  cliente viene rifiutata senza perdere quello che si stava scrivendo;
+- **scheda cliente**: tutte le linee attive con scadenza, prezzo e totale
+  mensile; da ricerca compare un pulsante cliente quando un cliente ha più
+  linee nei risultati. Il rivenditore vede solo le proprie linee e quante gliene
+  restano nascoste;
 - ricerca libera anche scrivendo senza comando (nome, alias, etichetta,
   username, ID);
 - autorizzazione rivenditori: notifica all'owner con **Autorizza**, oppure
@@ -128,23 +137,32 @@ CLI (`docker exec eight-manager-bot python -m app.cli …`):
 In ordine di valore. Nessuna di queste è necessaria perché il bot funzioni
 oggi: sono rifiniture che riducono il lavoro manuale.
 
-1. **Modifica anagrafica** dalla scheda: alias, etichetta (“Linea 1/2”), note e
-   dati tecnici (ID pannello, codice live, link VOD). Oggi si cambia solo il
-   prezzo. Servono le callback e un campo alla volta, con `access.can_act`.
-2. **Vista cliente**: un cliente con più linee (es. Mario Caterino 1/2/VOD) non
-   ha una scheda unica con totale mensile; i risultati di ricerca sono linee.
-3. **Wizard `/nuovo` completo**: oggi chiede nome, servizio, rivenditore,
+1. **Wizard `/nuovo` completo**: oggi chiede nome, servizio, rivenditore,
    prezzo e durata; mancano alias, etichetta e dati tecnici del pannello.
-4. **“Non rinnova” dal reminder**: la specifica lo prevede sul messaggio delle
+2. **“Non rinnova” dal reminder**: la specifica lo prevede sul messaggio delle
    09:00. Da decidere *cosa* deve fare ora che la disattivazione manuale non
    esiste: l'unica azione sensata è segnare la linea come “non rinnovare” e
    aspettare che scada e sparisca dal pannello.
-5. **Impostazioni modificabili**: `settings` oggi è in sola lettura
+3. **Impostazioni modificabili**: `settings` oggi è in sola lettura
    (`vod_domain` si legge solo dal wizard).
-6. **Valore del parco** in `/incassi`: riga “linee attive × prezzo” accanto ai
-   rinnovi del mese (396 €/mese al 2026-11-02).
-7. **Fase F**: rinnovo/cancellazione via HTTP sui pannelli. Rinviata di
+4. **Fase F**: rinnovo/cancellazione via HTTP sui pannelli. Rinviata di
    proposito: richiede gestione errori su sistemi non nostri.
+
+Nota sulla modifica anagrafica: il **link VOD** non è un campo salvato, si
+genera da `vod_domain` + username e password della linea (vedi
+`docs/panels-api.md`). Per questo non compare nel menu **Modifica**: cambia
+dominio, non cliente.
+
+## Corretto il 2026-11-02 (notte)
+
+- **Le viste del menu sollevavano `TypeError`**: `menu._target` era sincrona e
+  restituiva un metodo legato, ma tutti e sei i chiamanti facevano
+  `await _target(update)`. Risultato: `/start` da bottone, `/scadenze`,
+  `/incassi`, `Rivenditori` e `Impostazioni` fallivano appena usati, con
+  `object method can't be used in 'await' expression`. Non era emerso perché
+  il deploy è recente e nessun handler era stato esercitato dopo il riavvio
+  (i log mostravano solo heartbeat). Ora `_target` è `async` e
+  `tests/test_bot_menu.py` copre ogni vista, sia da bottone sia da comando.
 
 Debito tecnico noto:
 
@@ -161,7 +179,7 @@ Debito tecnico noto:
 ```bash
 uv sync                                  # dipendenze
 uv run ruff check . && uv run ruff format --check .
-uv run pytest -q                         # 145 test al 2026-11-02
+uv run pytest -q                         # 184 test al 2026-11-02
 ./scripts/deploy.sh --apply              # produzione
 ./scripts/verify.sh
 ```

@@ -7,10 +7,12 @@ autorizzazione rivenditori, reminder giornaliero e backup notturno.
 
 Differenze rispetto alla specifica originale:
 
-- la scheda linea ha **Prezzo** e non **Disattiva**: una linea esce dal bot solo
-  quando le righe spariscono dai pannelli (`prune-missing`), perché la
-  cancellazione remota è la fonte di verità;
-- etichetta, alias e note libere non sono ancora modificabili dal bot;
+- la scheda linea ha **Prezzo** e **Modifica** e non **Disattiva**: una linea
+  esce dal bot solo quando le righe spariscono dai pannelli (`prune-missing`),
+  perché la cancellazione remota è la fonte di verità;
+- etichetta, alias, note e dati tecnici si modificano dalla scheda con
+  **Modifica**, un campo alla volta; il link VOD non è modificabile perché si
+  genera dalle credenziali;
 - il rinnovo non «resta in attesa di conferma pannello»: il sync successivo
   riallinea comunque la scadenza e l'eventuale differenza appare nel report;
 - il job delle 09:00 manda il riepilogo all'owner (con le eccezioni da rivedere)
@@ -40,7 +42,7 @@ sui pannelli: il bot legge soltanto.
 ├── Scadenze            (oggi, 3 giorni, scadute)
 ├── Cerca cliente       (nome, alias, etichetta, codice, ID)
 ├── Nuovo cliente       (cliente + prima linea)
-├── Incassi             (mese corrente, per rivenditore)
+├── Incassi             (mese corrente per rivenditore + valore del parco)
 ├── Rivenditori
 └── Impostazioni        (dominio VOD)
 ```
@@ -65,11 +67,38 @@ cliente le elenca tutte con il totale mensile.
 🎬 Mario Caterino · Linea 1
 alias: "Mario il rosso" · Diretto
 Live + VOD · 5,00 €/mese
-ID pannello: 12345 · Codice live: ABC-123
-VOD: https://dominio/get.php?username=... (copia)
-Scade: 13/11/2026 · tra 12 giorni
+Live: mario2026 · VOD: mario-vod
+scade il 13/11/2026 (tra 11 giorni)
 
-[Rinnova] [Prezzo] [Storico]
+[✅ Rinnova] [💶 Prezzo]
+[✏️ Modifica]
+[🕘 Storico] [👤 Cliente]
+[🔎 Cerca]
+[🏠 Menu]
+```
+
+**Modifica** apre l'elenco dei campi: Alias, Etichetta, Note e, se la linea ha
+righe di pannello, **Dati pannello** (ID e codice per ciascun pannello, con il
+valore attuale accanto). Si cambia un campo alla volta; `-` svuota il campo.
+L'etichetta deve restare unica fra le linee attive dello stesso cliente: se è
+già presa il bot lo dice e lascia lo stato in attesa, così si corregge senza
+ripartire. Ogni modifica finisce in `audit_log`.
+
+### Scheda cliente
+
+**👤 Cliente** dalla scheda linea, oppure il pulsante che compare nei risultati
+quando un cliente ha più linee:
+
+```
+👤 Mario Caterino
+alias: "Mario il rosso"
+3 linee attive · 18,00 €/mese
+
+• Linea 1 — scade il 13/11/2026 (tra 11 giorni) · 5,00 €
+• Linea 2 — scade il 01/12/2026 (tra 29 giorni) · 6,00 €
+• Linea 3 — scade il 01/01/2027 · 7,00 €
+
+[Linea 1 · 13/11] [Linea 2 · 01/12] [Linea 3 · 01/01]
 ```
 
 ### Rinnovo con "Fatto"

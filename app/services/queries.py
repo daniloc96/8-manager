@@ -38,6 +38,10 @@ class IncomeReport:
     month: int
     rows: list[IncomeRow] = field(default_factory=list)
     total_cents: int = 0
+    # Valore del parco: linee attive e somma dei prezzi mensili. Non dipende
+    # dai rinnovi del mese, serve solo a leggere la dimensione del giro.
+    active_lines: int = 0
+    monthly_cents: int = 0
 
 
 async def active_lines(session: AsyncSession) -> list[Line]:
@@ -123,6 +127,48 @@ async def search_lines(
     return matches[:limit]
 
 
+@dataclass(slots=True)
+class CustomerOverview:
+    """Un cliente con tutte le sue linee attive e il totale mensile."""
+
+    customer: Customer
+    lines: list[Line] = field(default_factory=list)
+    monthly_cents: int = 0
+    hidden_lines: int = 0
+
+    @property
+    def active_lines(self) -> int:
+        return len(self.lines)
+
+
+async def customer_overview(
+    session: AsyncSession,
+    customer_id: int,
+    *,
+    reseller_id: int | None = None,
+) -> CustomerOverview | None:
+    """Scheda cliente. Con `reseller_id` conta solo le linee di quel rivenditore."""
+    customer = await session.get(Customer, customer_id)
+    if customer is None or customer.deleted_at is not None:
+        return None
+
+    rows = list(
+        (
+            await session.scalars(
+                select(Line).where(Line.customer_id == customer_id, Line.deleted_at.is_(None))
+            )
+        ).all()
+    )
+    rows.sort(key=_sort_key)
+    visible = [line for line in rows if reseller_id is None or line.reseller_id == reseller_id]
+    return CustomerOverview(
+        customer=customer,
+        lines=visible,
+        monthly_cents=sum(line.monthly_price_cents for line in visible),
+        hidden_lines=len(rows) - len(visible),
+    )
+
+
 async def get_line(session: AsyncSession, line_id: int) -> Line | None:
     line = await session.get(Line, line_id)
     if line is None or line.deleted_at is not None:
@@ -194,6 +240,10 @@ async def income_report(session: AsyncSession, year: int, month: int) -> IncomeR
     report.rows = sorted(
         buckets.values(), key=lambda item: (item.reseller is None, item.reseller or "")
     )
+
+    portfolio = await active_lines(session)
+    report.active_lines = len(portfolio)
+    report.monthly_cents = sum(line.monthly_price_cents for line in portfolio)
     return report
 
 
