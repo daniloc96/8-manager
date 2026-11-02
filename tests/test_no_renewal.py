@@ -205,3 +205,38 @@ async def test_callback_rejects_non_owner(session, bot_session_factory) -> None:
     assert query.alerts and "owner" in query.alerts[0]
     async with bot_session_factory() as check:
         assert (await check.get(Line, line.id)).no_renewal is False
+
+
+async def test_renewal_clears_the_flag(session, engine) -> None:
+    """Rinnovare la linea toglie la marcatura, senza passare dal pulsante."""
+    from app.models import AuditLog
+    from app.models.enums import RenewalSource
+    from app.services.lines import renew_line
+
+    line = await _line(session)
+    line_id = line.id
+    await _flag(engine, line_id)
+
+    factory = async_sessionmaker(engine, expire_on_commit=False)
+    async with factory() as own:
+        fresh = await own.get(Line, line_id)
+        assert fresh is not None
+        assert fresh.no_renewal is True
+
+        await renew_line(own, fresh, months=3, today=TODAY, source=RenewalSource.CARD)
+        await own.commit()
+
+    async with factory() as own:
+        after = await own.get(Line, line_id)
+        assert after is not None
+        assert after.no_renewal is False
+        assert after.no_renewal_at is None
+        audit = await own.scalar(
+            select(AuditLog).where(
+                AuditLog.entity == "line",
+                AuditLog.entity_id == line_id,
+                AuditLog.action == "line_no_renewal_clear",
+            )
+        )
+        assert audit is not None
+        assert audit.payload["reason"] == "renewed"

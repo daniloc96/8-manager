@@ -14,7 +14,7 @@ from app.bot import ui
 from app.bot.auth import access_for
 from app.config import get_settings
 from app.db import session_scope
-from app.models import Reseller, Service
+from app.models import PanelLine, Reseller, Service
 from app.services import settings as settings_service
 from app.services.anagrafica import ALIAS_MAX, LABEL_MAX
 from app.services.lines import LineDraft, create_customer_and_line
@@ -85,6 +85,24 @@ async def _ask_tech_code(query, state) -> None:
     )
 
 
+async def _skip(query, state, field: str) -> None:
+    """Salta un campo facoltativo e prosegue dal passo successivo.
+
+    Alias ed etichetta precedono prezzo e durata: senza questo smistamento il
+    salto finiva nel riepilogo con il prezzo ancora mancante.
+    """
+    if field == "alias":
+        state["step"] = "reseller"
+        await _ask_reseller(query, state)
+        return
+    if field == "label":
+        state["step"] = "price"
+        body, markup = _ask_price(state)
+        await query.edit_message_text(body, parse_mode=ParseMode.HTML, reply_markup=markup)
+        return
+    await _advance_tech(query, state, state["step"])
+
+
 async def _advance_tech(query, state, step: str) -> None:
     """Dopo un dato tecnico: il successivo, oppure il riepilogo."""
     if step == "tech_id":
@@ -147,10 +165,6 @@ async def _ask_reseller(query, state) -> None:
         parse_mode=ParseMode.HTML,
         reply_markup=InlineKeyboardMarkup(rows),
     )
-
-
-def _ask_alias(query, state) -> None:
-    raise NotImplementedError
 
 
 def _ask_price(state) -> tuple[str, InlineKeyboardMarkup]:
@@ -257,8 +271,9 @@ async def on_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
             )
             return
         state["price"] = int(raw)
-        state["step"] = "tech"
-        await _ask_tech(query, state)
+        state["step"] = "months"
+        body, markup = _ask_months(state)
+        await query.edit_message_text(body, parse_mode=ParseMode.HTML, reply_markup=markup)
         return
 
     if action.startswith("months:"):
@@ -271,15 +286,13 @@ async def on_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
             )
             return
         state["months"] = int(raw)
-        state["step"] = "confirm"
-        body, markup = _summary(state)
-        await query.edit_message_text(body, parse_mode=ParseMode.HTML, reply_markup=markup)
+        await _ask_tech(query, state)
         return
 
     if action.startswith("skip:"):
         field = action.split(":", 1)[1]
         state[field] = None
-        await _advance_tech(query, state, state["step"])
+        await _skip(query, state, field)
         return
 
     if action == "create":
@@ -320,7 +333,7 @@ async def _create(update: Update, context: ContextTypes.DEFAULT_TYPE, query) -> 
             await query.edit_message_text(f"Non creato: {exc}")
             return
 
-        username = _username_for(state["name"], today)
+        username = await _unique_username(session, state["name"], today)
         password = _password()
         expires = line.expires_on
         line_id = line.id
@@ -364,6 +377,26 @@ async def _create(update: Update, context: ContextTypes.DEFAULT_TYPE, query) -> 
             ]
         ),
     )
+
+
+async def _unique_username(session, name: str, today) -> str:
+    """Username suggerito, libero rispetto a quelli già presenti nei pannelli.
+
+    Lo schema del pannello è nome + data: due clienti omonimi creati lo stesso
+    giorno otterrebbero lo stesso username e il conto colliderebbe.
+    """
+    base = _username_for(name, today)
+    candidate = base
+    suffix = 2
+    while (
+        await session.scalar(select(PanelLine.id).where(PanelLine.username_key == candidate))
+        is not None
+    ):
+        candidate = f"{base}{suffix}"
+        suffix += 1
+        if suffix > 99:
+            raise ValueError("troppi username simili: controlla il pannello.")
+    return candidate
 
 
 def _username_for(name: str, today) -> str:
@@ -463,13 +496,9 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE) -> boo
             await message.reply_html("Prezzo non valido: scrivi per esempio <code>5</code>.")
             return True
         state["price"] = cents
-        state["step"] = "tech"
-        await message.reply_html(
-            f"🆕 <b>{ui.esc(state['name'])}</b>\n\n"
-            "ID della linea nel pannello? (se lo hai già)\n"
-            "Puoi saltarlo: lo recupera il /sync quando la linea esiste.",
-            reply_markup=InlineKeyboardMarkup([_skip_row("panel_external_id"), _cancel_row()]),
-        )
+        state["step"] = "months_text"
+        body, markup = _ask_months(state)
+        await message.reply_html(body, reply_markup=markup)
         return True
 
     if step == "months_text":

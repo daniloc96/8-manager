@@ -33,6 +33,16 @@ class DomainSetting(EditableSetting):
             raise SettingValueError("il dominio deve iniziare con http:// o https://.")
         if not parsed.netloc:
             raise SettingValueError("manca il dominio.")
+        if parsed.username or parsed.password:
+            raise SettingValueError(
+                "il dominio non può contenere credenziali: scrivi solo schema e dominio."
+            )
+        raw_host = parsed.netloc.rsplit("@", 1)[-1]
+        if "?" in raw_host or "#" in raw_host:
+            raise SettingValueError("il dominio non può contenere ? o #.")
+        # urlparse scarta un ? o # finale nella query: va guardata la stringa.
+        if any(char in cleaned for char in "?#"):
+            raise SettingValueError("il dominio non può contenere ? o #.")
         if parsed.path not in {"", "/"} or parsed.query or parsed.fragment:
             raise SettingValueError("scrivi solo schema e dominio, senza percorso né parametri.")
         if any(char in cleaned for char in " <>\"'`"):

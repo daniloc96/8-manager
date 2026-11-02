@@ -91,8 +91,9 @@ async def test_wizard_price_input() -> None:
 
     assert await newline.handle_text(update, context) is True
     assert context.user_data["new_line"]["price"] == 550
-    # Dopo il prezzo restano i dati tecnici, poi il riepilogo.
-    assert context.user_data["new_line"]["step"] == "tech"
+    # Dopo il prezzo si sceglie la durata, poi i dati tecnici e il riepilogo:
+    # lo stato deve essere quello che il gestore del testo successivo conosce.
+    assert context.user_data["new_line"]["step"] == "months_text"
 
 
 async def test_wizard_months_input_validates_range() -> None:
@@ -195,3 +196,180 @@ def test_username_has_no_spaces(name: str) -> None:
     username = newline._username_for(name, date(2026, 11, 2))
     assert " " not in username
     assert username.endswith("021126")
+
+
+# --- catena di callback: il wizard vero, non solo handle_text ---------------
+# Un test che popola `state` a mano non vede gli errori dei rami a bottone:
+# è così che uno stub rimasto in newline.py ha reso /nuovo inutilizzabile
+# con la suite tutta verde.
+
+
+class FakeQuery:
+    def __init__(self, data: str) -> None:
+        self.data = data
+        self.answered = False
+        self.edits: list[str] = []
+        self.markup = None
+
+    async def answer(self, *args, **kwargs):
+        self.answered = True
+
+    async def edit_message_text(self, text, **kwargs):
+        self.edits.append(text)
+        self.markup = kwargs.get("reply_markup")
+
+
+def callback_update(data: str) -> SimpleNamespace:
+    chat = SimpleNamespace(id=OWNER_ID, type="private")
+    return SimpleNamespace(
+        callback_query=FakeQuery(data),
+        effective_user=SimpleNamespace(id=OWNER_ID, first_name="Danilo"),
+        effective_chat=chat,
+        effective_message=SimpleNamespace(chat=chat),
+    )
+
+
+def buttons(markup) -> list[str]:
+    if markup is None:
+        return []
+    return [button.callback_data for row in markup.inline_keyboard for button in row]
+
+
+async def test_wizard_walks_every_callback(bot_session_factory) -> None:
+    """Dal servizio alla conferma passando solo dai bottoni."""
+    context = fake_context({"step": "name"})
+
+    # nome -> servizio
+    assert await newline.handle_text(fake_update("Mario Rossi"), context) is True
+    assert context.user_data["new_line"]["step"] == "service"
+
+    update = callback_update("new:service:live_vod")
+    await newline.on_callback(update, context)
+    assert update.callback_query.answered is True
+    assert context.user_data["new_line"]["step"] == "alias"
+    assert "alias" in update.callback_query.edits[0].lower()
+    assert "new:skip:alias" in buttons(update.callback_query.markup)
+
+    # alias digitato -> rivenditore
+    assert await newline.handle_text(fake_update("Mario il rosso"), context) is True
+    assert context.user_data["new_line"]["alias"] == "Mario il rosso"
+    assert context.user_data["new_line"]["step"] == "reseller"
+
+    # rivenditore diretto -> etichetta
+    update = callback_update("new:reseller:0")
+    await newline.on_callback(update, context)
+    assert context.user_data["new_line"]["step"] == "label"
+    assert "new:skip:label" in buttons(update.callback_query.markup)
+
+    # etichetta dal bottone Salta -> prezzo
+    update = callback_update("new:skip:label")
+    await newline.on_callback(update, context)
+    assert context.user_data["new_line"]["label"] is None
+    assert context.user_data["new_line"]["step"] == "price"
+
+    # prezzo da listino -> primo dato tecnico (il primo preset, non "Altro…")
+    preset = next(
+        data
+        for data in buttons(update.callback_query.markup)
+        if data.startswith("new:price:") and data != "new:price:other"
+    )
+    update = callback_update(preset)
+    await newline.on_callback(update, context)
+    assert context.user_data["new_line"]["price"] == int(preset.rsplit(":", 1)[1])
+    assert context.user_data["new_line"]["step"] == "months"
+
+    # durata -> primo dato tecnico
+    update = callback_update("new:months:3")
+    await newline.on_callback(update, context)
+    assert context.user_data["new_line"]["months"] == 3
+    assert context.user_data["new_line"]["step"] == "tech_id"
+    assert "new:skip:panel_external_id" in buttons(update.callback_query.markup)
+
+    # ID pannello -> codice di accesso
+    assert await newline.handle_text(fake_update("ABC123"), context) is True
+    assert context.user_data["new_line"]["panel_external_id"] == "ABC123"
+    assert context.user_data["new_line"]["step"] == "tech_code"
+
+    # codice saltato -> riepilogo
+    update = callback_update("new:skip:panel_access_code")
+    await newline.on_callback(update, context)
+    assert context.user_data["new_line"]["step"] == "confirm"
+    summary = update.callback_query.edits[-1]
+    assert "Mario Rossi" in summary and "ABC123" in summary
+    assert "new:create" in buttons(update.callback_query.markup)
+
+
+async def test_wizard_price_text_keeps_tech_step_usable(bot_session_factory) -> None:
+    """Un prezzo scritto a mano non deve lasciare lo stato su un passo morto."""
+    context = fake_context({"step": "price_text", "name": "Mario Rossi", "service": "live"})
+
+    assert await newline.handle_text(fake_update("5,50"), context) is True
+    assert context.user_data["new_line"]["step"] == "months_text"
+
+    # Il testo successivo deve essere consumato come durata, non ignorato.
+    assert await newline.handle_text(fake_update("6"), context) is True
+    assert context.user_data["new_line"]["months"] == 6
+    assert context.user_data["new_line"]["step"] == "tech_id"
+
+    # E poi come ID pannello.
+    assert await newline.handle_text(fake_update("ZZ9"), context) is True
+    assert context.user_data["new_line"]["panel_external_id"] == "ZZ9"
+    assert context.user_data["new_line"]["step"] == "tech_code"
+
+
+async def test_wizard_creates_line_from_callbacks(bot_session_factory, session) -> None:
+    """Il pulsante Crea scrive davvero cliente e linea."""
+    from sqlalchemy import select
+
+    from app.models import Customer, Line
+
+    context = fake_context(
+        {
+            "step": "confirm",
+            "name": "Mario Rossi",
+            "service": "live",
+            "alias": "Mario il rosso",
+            "label": None,
+            "reseller_id": None,
+            "reseller_name": None,
+            "price": 500,
+            "months": 3,
+            "panel_external_id": "ABC123",
+            "panel_access_code": None,
+        }
+    )
+    update = callback_update("new:create")
+    await newline.on_callback(update, context)
+
+    assert "new_line" not in context.user_data
+    customer = await session.scalar(select(Customer).where(Customer.name == "Mario Rossi"))
+    assert customer is not None
+    line = await session.scalar(select(Line).where(Line.customer_id == customer.id))
+    assert line is not None
+    assert line.monthly_price_cents == 500
+    # L'alias è del cliente, non della singola linea.
+    assert customer.alias == "Mario il rosso"
+
+
+async def test_username_is_unique_across_panels(bot_session_factory, session) -> None:
+    """Due omonimi lo stesso giorno non devono ricevere lo stesso username."""
+    from datetime import datetime
+
+    from app.models import PanelLine
+    from app.models.enums import Platform
+
+    today = date(2026, 11, 2)
+    taken = newline._username_for("Mario Rossi", today)
+    session.add(
+        PanelLine(
+            platform=Platform.LIVE_HALLO,
+            external_id="x1",
+            username=taken,
+            username_key=taken,
+            first_seen_at=datetime.now(),
+        )
+    )
+    await session.commit()
+
+    assert await newline._unique_username(session, "Mario Rossi", today) == f"{taken}2"
+    assert await newline._unique_username(session, "Luigi Verdi", today) != taken

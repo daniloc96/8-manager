@@ -7,6 +7,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import async_sessionmaker
 
 import app.db as db_module
+import app.services.settings as settings
 from app.bot import settings_bot
 from app.models import AuditLog, Setting
 from app.services.settings import SettingValueError, read_value, set_value
@@ -153,3 +154,22 @@ async def test_non_owner_cannot_open_settings(session, bot_session_factory) -> N
 
     assert query.alerts and "owner" in query.alerts[0]
     assert query.text is None
+
+
+def test_domain_rejects_credentials() -> None:
+    """Le credenziali in URL finirebbero in un link consegnato al cliente."""
+    setting = settings.EDITABLE_SETTINGS["vod_domain"]
+    for bad in (
+        "https://user:pass@vod.example.org",
+        "https://user@vod.example.org",
+        "https://vod.example.org?",
+        "https://vod.example.org#",
+    ):
+        with pytest.raises(settings.SettingValueError):
+            setting.validate(bad)
+
+
+def test_domain_accepts_plain_host() -> None:
+    setting = settings.EDITABLE_SETTINGS["vod_domain"]
+    assert setting.validate("https://vod.example.org/") == "https://vod.example.org"
+    assert setting.validate(" http://vod.example.org ") == "http://vod.example.org"

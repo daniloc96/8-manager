@@ -1,11 +1,11 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import date
+from datetime import date, datetime
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models import Customer, Line, Renewal
+from app.models import AuditLog, Customer, Line, Renewal
 from app.models.enums import RenewalSource, Service
 from app.services.anagrafica import ALIAS_MAX, LABEL_MAX
 from app.services.months import MAX_MONTHS, MIN_MONTHS, add_months, plan_renewal
@@ -117,6 +117,24 @@ async def renew_line(
     line.expires_on = plan.period_end
     line.anchor_day = plan.anchor_day
     line.monthly_price_cents = price
+    # Rinnovare significa rinnovare: la marcatura operativa non ha più senso.
+    if line.no_renewal:
+        line.no_renewal = False
+        line.no_renewal_at = None
+        session.add(
+            AuditLog(
+                action="line_no_renewal_clear",
+                entity="line",
+                entity_id=line.id,
+                payload={
+                    "old": True,
+                    "new": False,
+                    "reason": "renewed",
+                    "actor_telegram_id": actor_telegram_id,
+                    "at": datetime.now().isoformat(timespec="seconds"),
+                },
+            )
+        )
     session.add(renewal)
     await session.flush()
     return renewal
