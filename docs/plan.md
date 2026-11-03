@@ -41,7 +41,7 @@ allineate ai rispettivi remoti.
 Il deploy usa sempre **bash**, non zsh: `scripts/lib/remote.sh` ha un `trap`
 che in zsh cancella la chiave SSH temporanea prima di usarla.
 
-## Dati (2026-11-02)
+## Dati (2026-11-03)
 
 | Voce | Valore |
 | --- | --- |
@@ -51,7 +51,7 @@ che in zsh cancella la chiave SSH temporanea prima di usarla.
 | Rivenditori | 1: **Mario**, senza ID Telegram collegato |
 | Linee di Mario | 35 · 235 €/mese |
 | Linee dirette | 22 · 161 €/mese |
-| Totale parco | **396 €/mese** (3 linee a 0 €: Personale, Alessia, Danilo) |
+| Totale parco | **363 €/mese** su 51 linee non scadute (6 scadute per 30 €/mese, fuori dal guadagno) |
 | Eccezioni attive | linea 33 (personale, per sempre) · 78 (fino al 19/12/2026) · 11 (fino al 04/01/2027) |
 
 Regole commerciali applicate nel backfill:

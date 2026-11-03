@@ -248,7 +248,7 @@ async def show_income(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
 
     today = _today()
     async with session_scope() as session:
-        report = await income_report(session, today.year, today.month)
+        report = await income_report(session, today.year, today.month, today=today)
 
     body = [f"💰 <b>Incassi</b> · {today.month:02d}/{today.year}"]
     if not report.rows:
@@ -271,6 +271,11 @@ async def show_income(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
         body.append(
             "<i>Un cliente con Live e VOD è una sola linea di incasso: i due "
             "canali non si sommano a parte.</i>"
+        )
+    if report.expired_lines:
+        body.append(
+            f"⏳ Escluse {report.expired_lines} linee scadute: "
+            f"{format_eur(report.expired_cents)}/mese in attesa di rinnovo."
         )
 
     await target(

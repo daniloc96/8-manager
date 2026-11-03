@@ -321,10 +321,12 @@ Due numeri diversi, e non vanno confusi:
 
 - **Incassi del mese** — la somma dei rinnovi registrati nel mese, per
   rivenditore. È il denaro entrato.
-- **Parco** — il giro mensile: somma di `monthly_price_cents` delle linee attive,
-  con clienti distinti e linee attive a confronto. Un cliente con Live e VOD ha
-  una sola linea di incasso: il prezzo è del cliente, non del canale, quindi il
-  totale non raddoppia.
+- **Parco** — il giro mensile: somma di `monthly_price_cents` delle linee attive
+  **e non scadute**, con clienti distinti e linee attive a confronto. Una linea
+  con `expires_on` passato aspetta il rinnovo e non è guadagno: viene esclusa e
+  contata a parte («Escluse N linee scadute: X €/mese in attesa di rinnovo»).
+  Un cliente con Live e VOD ha una sola linea di incasso: il prezzo è del
+  cliente, non del canale, quindi il totale non raddoppia.
 
 Il messaggio di approvazione del rinnovo riporta l'importo (`mesi × prezzo
 mensile`) sia all'owner sia al rivenditore, nel privato e nel gruppo.

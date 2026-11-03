@@ -262,6 +262,36 @@ async def test_portfolio_counts_customers_not_channels(session) -> None:
     assert report.monthly_cents == 2000
 
 
+async def test_expired_lines_are_not_income(session) -> None:
+    """Una linea scaduta non è guadagno: resta per il rinnovo, fuori dal parco."""
+    _mario, _anna, _reseller, lines = await _seed(session)
+    lines[0].expires_on = date(2026, 10, 20)
+    await session.flush()
+
+    report = await income_report(session, 2026, 11, today=TODAY)
+
+    assert report.active_lines == 3
+    assert report.monthly_cents == 1500
+    assert report.expired_lines == 1
+    assert report.expired_cents == 500
+    # senza `today` non si filtra: la vista anagrafica vede tutte le attive
+    plain = await income_report(session, 2026, 11)
+    assert plain.active_lines == 4
+    assert plain.expired_lines == 0
+
+
+async def test_client_with_only_expired_lines_is_not_counted(session) -> None:
+    _mario, anna, _reseller, lines = await _seed(session)
+    for line in lines:
+        if line.customer_id == anna.id:
+            line.expires_on = date(2026, 1, 1)
+    await session.flush()
+
+    report = await income_report(session, 2026, 11, today=TODAY)
+
+    assert report.active_customers == 1, "Anna non paga più: fuori dal conteggio"
+
+
 async def test_income_report_portfolio_survives_empty_month(session) -> None:
     await _seed(session)
 

@@ -45,6 +45,9 @@ class IncomeReport:
     # Clienti distinti dietro quelle linee: alcuni hanno Live e VOD, o due
     # linee, ma il guadagno non si conta due volte per lo stesso cliente.
     active_customers: int = 0
+    # Linee già scadute: restano nel bot per il rinnovo, ma non sono guadagno.
+    expired_lines: int = 0
+    expired_cents: int = 0
 
 
 async def active_lines(session: AsyncSession) -> list[Line]:
@@ -210,7 +213,19 @@ def panel_for(line: Line, platform: Platform):
     return None
 
 
-async def income_report(session: AsyncSession, year: int, month: int) -> IncomeReport:
+async def income_report(
+    session: AsyncSession,
+    year: int,
+    month: int,
+    *,
+    today: date | None = None,
+) -> IncomeReport:
+    """Incassi del mese e valore del parco.
+
+    Il parco conta solo le linee **non scadute**: una linea con `expires_on` nel
+    passato aspetta il rinnovo, non è guadagno corrente. Senza `today` non si
+    filtra (utile nei test e nelle viste che ragionano sull'anagrafica).
+    """
     """Incassi registrati nel mese: rinnovi creati, raggruppati per rivenditore."""
     start = date(year, month, 1)
     end = add_months(start, 1, 1)
@@ -245,9 +260,16 @@ async def income_report(session: AsyncSession, year: int, month: int) -> IncomeR
     )
 
     portfolio = await active_lines(session)
-    report.active_lines = len(portfolio)
-    report.active_customers = len({line.customer_id for line in portfolio})
-    report.monthly_cents = sum(line.monthly_price_cents for line in portfolio)
+    if today is None:
+        current, expired = portfolio, []
+    else:
+        current = [line for line in portfolio if line.expires_on >= today]
+        expired = [line for line in portfolio if line.expires_on < today]
+    report.active_lines = len(current)
+    report.active_customers = len({line.customer_id for line in current})
+    report.monthly_cents = sum(line.monthly_price_cents for line in current)
+    report.expired_lines = len(expired)
+    report.expired_cents = sum(line.monthly_price_cents for line in expired)
     return report
 
 
