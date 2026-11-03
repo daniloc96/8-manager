@@ -69,7 +69,11 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 
     chat = update.effective_chat
     if chat is not None and is_group(chat.type):
-        # nei gruppi il menu non serve: si usano i comandi indirizzati
+        # In gruppo il menu diventa una pulsantiera: stesse poche cose, ma
+        # senza comandi da ricordare e senza prezzi.
+        from app.bot import group_menu
+
+        await group_menu.start(update, context)
         return
 
     async with session_scope() as session:

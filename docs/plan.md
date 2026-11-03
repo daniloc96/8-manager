@@ -122,11 +122,11 @@ Bot (owner):
   riporta la chiave al default di `.env`; un valore vuoto viene rifiutato;
 - **Riepilogo nel gruppo**: ogni gruppo collegato a un rivenditore riceve alle
   09:00 le scadenze dei prossimi `reminder_days` giorni (3), solo per le linee di
-  quel rivenditore; parte ogni giorno anche a lista vuota («Nessuna scadenza nei
-  prossimi 3 giorni») e non ripete le stesse linee nello stesso giorno (claim per
-  chat e linea). Ogni linea in scadenza ha il pulsante «Richiedi»: si sceglie il
+  quel rivenditore; se non c'è niente in scadenza **non parte**, e non ripete le
+  stesse linee nello stesso giorno (claim per chat e linea). Ogni linea in scadenza ha il pulsante «Richiedi»: si sceglie il
   periodo tra i preset e solo dopo la conferma la richiesta parte e l'owner viene
-  avvisato (`greq` → `greqm` → `greqy`).
+  avvisato (`greq` → `greqm` → `greqy`). In gruppo `/start` apre una pulsantiera
+  (scadenze, rinnovo, aiuto) al posto dei comandi testuali.
 - **Rivenditore da bot**: dalla scheda cliente «🏷 Rivenditore» sposta tutte le
   linee attive su un rivenditore o le riporta a «Diretto», con audit per linea;
   la stessa voce è nel menu **Modifica** della singola linea. Il campo vive sulla

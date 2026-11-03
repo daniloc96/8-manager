@@ -157,25 +157,17 @@ async def build_reminder(
     return "\n".join(body), InlineKeyboardMarkup(buttons)
 
 
-async def build_group_reminder(
-    today: date,
-    *,
-    reseller_id: int,
-    chat_id: int,
-    factory=None,
-) -> tuple[str, InlineKeyboardMarkup | None] | None:
-    """Scadenze dei prossimi giorni per il gruppo di un rivenditore.
+async def group_rows(
+    today: date, *, reseller_id: int, factory=None
+) -> list[tuple[int, int, str, date]]:
+    """Scadenze in finestra di un rivenditore: (id, giorni, titolo, data).
 
-    Solo le linee di quel rivenditore, con la finestra di `reminder_days`
-    (oggi compreso). Nessun pulsante: in un gruppo i comandi dell'owner non
-    hanno senso. Il messaggio parte ogni giorno, anche senza scadenze.
+    Non scrive niente: chi la usa decide se segnare le linee come annunciate.
     """
-    settings = get_settings()
-    warn_days = settings.reminder_days
+    warn_days = get_settings().reminder_days
     session_factory = factory or get_session_factory()
 
     rows: list[tuple[int, int, str, date]] = []
-    candidates = 0
     async with session_factory() as session:
         muted = await muted_line_ids(session, today)
         lines = list(
@@ -194,34 +186,21 @@ async def build_group_reminder(
             delta = days_left(line.expires_on, today)
             if delta < 0 or delta > warn_days:
                 continue
-            candidates += 1
-            if not await _claim(
-                session,
-                kind=KIND_GROUP_EXPIRING,
-                line_id=line.id,
-                chat_id=chat_id,
-                today=today,
-            ):
-                continue
             rows.append((line.id, delta, ui.line_title(line), line.expires_on))
-        await session.commit()
+    rows.sort(key=lambda row: row[1])
+    return rows
 
-    if not rows and candidates:
-        # C'erano scadenze ma erano già state annunciate oggi: non si ripete,
-        # e non si finge che non ci sia nulla.
-        return None
 
-    # Il messaggio parte ogni giorno, anche a lista vuota: è la conferma che
-    # il gruppo è collegato e che il bot sta guardando le scadenze giuste.
-    body = [
-        f"⏰ <b>Scadenze</b> · prossimi {warn_days} giorni",
-        "",
-    ]
+def group_payload(
+    rows: list[tuple[int, int, str, date]], *, warn_days: int | None = None
+) -> tuple[str, InlineKeyboardMarkup] | None:
+    """Testo e pulsanti del riepilogo. `None` se non c'è niente da dire."""
     if not rows:
-        body.append("<i>Nessuna scadenza nei prossimi " + str(warn_days) + " giorni.</i>")
-        return "\n".join(body), None
+        return None
+    warn_days = warn_days if warn_days is not None else get_settings().reminder_days
 
-    for _line_id, delta, title, expires in sorted(rows, key=lambda row: row[1]):
+    body = [f"⏰ <b>Scadenze</b> · prossimi {warn_days} giorni", ""]
+    for _line_id, delta, title, expires in rows:
         when = (
             "scade oggi" if delta == 0 else "scade domani" if delta == 1 else f"tra {delta} giorni"
         )
@@ -236,9 +215,47 @@ async def build_group_reminder(
                 callback_data=f"greq:{line_id}",
             )
         ]
-        for line_id, _delta, title, _expires in sorted(rows)
+        for line_id, _delta, title, _expires in rows
     ]
     return "\n".join(body), InlineKeyboardMarkup(buttons)
+
+
+async def build_group_reminder(
+    today: date,
+    *,
+    reseller_id: int,
+    chat_id: int,
+    factory=None,
+) -> tuple[str, InlineKeyboardMarkup] | None:
+    """Scadenze dei prossimi giorni per il gruppo di un rivenditore.
+
+    Solo le linee di quel rivenditore, con la finestra di `reminder_days`
+    (oggi compreso). Se non c'è niente in scadenza non si invia niente: un
+    messaggio vuoto ogni giorno è solo rumore nel gruppo.
+    """
+    rows = await group_rows(today, reseller_id=reseller_id, factory=factory)
+    if not rows:
+        return None
+
+    session_factory = factory or get_session_factory()
+    fresh: list[tuple[int, int, str, date]] = []
+    async with session_factory() as session:
+        for row in rows:
+            claimed = await _claim(
+                session,
+                kind=KIND_GROUP_EXPIRING,
+                line_id=row[0],
+                chat_id=chat_id,
+                today=today,
+            )
+            if claimed:
+                fresh.append(row)
+        await session.commit()
+
+    if not fresh:
+        # Tutte già annunciate oggi: niente doppioni.
+        return None
+    return group_payload(fresh)
 
 
 def _short_title(title: str, limit: int = 26) -> str:

@@ -21,6 +21,7 @@ from app.bot import (
     customer,
     editline,
     flagged,
+    group_menu,
     group_request,
     lines,
     menu,
@@ -131,6 +132,7 @@ def build_application() -> Application:
     application.add_handler(
         CallbackQueryHandler(reseller.on_callback, pattern=r"^(rq|rqm|rqa|rqr|auth):")
     )
+    application.add_handler(CallbackQueryHandler(group_menu.on_callback, pattern=r"^gmenu:"))
     application.add_handler(CallbackQueryHandler(group_request.ask, pattern=r"^greq:"))
     application.add_handler(CallbackQueryHandler(group_request.pick_months, pattern=r"^greqm:"))
     application.add_handler(CallbackQueryHandler(group_request.confirm, pattern=r"^greqy:"))

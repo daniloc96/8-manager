@@ -6,7 +6,7 @@ giorni (default 3), solo per le linee del rivenditore collegato a quel gruppo.
 
 from __future__ import annotations
 
-from datetime import date
+from datetime import date, timedelta
 from types import SimpleNamespace
 
 import pytest
@@ -115,8 +115,8 @@ async def test_group_message_says_when_each_line_expires(session, engine) -> Non
     assert "scade domani" in body
 
 
-async def test_daily_message_also_when_nothing_is_due(session, engine) -> None:
-    """«Giornalmente» vale anche a lista vuota: è la conferma che il bot guarda."""
+async def test_no_message_when_nothing_is_due(session, engine) -> None:
+    """Niente scadenze, niente messaggio: il gruppo non deve ricevere spam."""
     luca = await _reseller(session, "Luca", group_id=-100999)
     await _line(session, luca.id, expires=date(2027, 6, 1), name="Lontano")
 
@@ -124,9 +124,7 @@ async def test_daily_message_also_when_nothing_is_due(session, engine) -> None:
         TODAY, reseller_id=luca.id, chat_id=-100999, factory=async_sessionmaker(engine)
     )
 
-    assert built is not None
-    body = built[0]
-    assert "Nessuna scadenza nei prossimi 3 giorni" in body
+    assert built is None
 
 
 async def test_same_day_second_run_does_not_repeat(session, engine) -> None:
@@ -149,6 +147,19 @@ class FakeBot:
 
     async def send_message(self, chat_id, text, **kwargs):
         self.sent.append((chat_id, text))
+
+
+async def test_job_stays_silent_in_group_without_due_lines(
+    session, engine, bot_session_factory
+) -> None:
+    today = job_today()
+    luca = await _reseller(session, "Luca", group_id=-100999)
+    await _line(session, luca.id, expires=today + timedelta(days=30), name="Lontano")
+
+    bot = FakeBot()
+    await reminder_job(SimpleNamespace(bot=bot))
+
+    assert all(chat_id != -100999 for chat_id, _text in bot.sent), "niente spam a vuoto"
 
 
 async def test_job_sends_to_each_linked_group_only(session, engine, bot_session_factory) -> None:
