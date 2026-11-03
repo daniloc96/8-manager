@@ -120,6 +120,13 @@ Bot (owner):
 - **impostazioni modificabili**: `vod_domain` si cambia dal bot con
   validazione (schema `http`/`https`, niente percorso né parametri). `-`
   riporta la chiave al default di `.env`; un valore vuoto viene rifiutato;
+- **Rivenditore da bot**: dalla scheda cliente «🏷 Rivenditore» sposta tutte le
+  linee attive su un rivenditore o le riporta a «Diretto», con audit per linea;
+  la stessa voce è nel menu **Modifica** della singola linea. Il campo vive sulla
+  linea, quindi il sync non lo sovrascrive;
+- **Vista Codici**: «🔑 Codici» dalla scheda cliente o dalla linea elenca per
+  ogni pannello username, password, codice, ID e scadenza salvati dal sync. Solo
+  owner. 8TV+ non ha password, il VOD non ha codice: la vista lo dice;
 - **«Non rinnova» dal reminder**: ogni linea in scadenza ha il pulsante
   **🚫 Non rinnova**, con conferma prima di scrivere. La marcatura non tocca
   il pannello: è un promemoria che resta nel reminder delle 09:00 (anche se la
@@ -190,7 +197,7 @@ Debito tecnico noto:
 ```bash
 uv sync                                  # dipendenze
 uv run ruff check . && uv run ruff format --check .
-uv run pytest -q                         # 216 test al 2026-11-03
+uv run pytest -q                         # 233 test al 2026-11-03
 ./scripts/deploy.sh --apply              # produzione
 ./scripts/verify.sh
 ```

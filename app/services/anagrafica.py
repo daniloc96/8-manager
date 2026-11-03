@@ -3,7 +3,7 @@ from __future__ import annotations
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models import AuditLog, Customer, Line, PanelLine, Platform
+from app.models import AuditLog, Customer, Line, PanelLine, Platform, Reseller
 from app.services.text import customer_search_key
 
 ALIAS_MAX = 160
@@ -185,3 +185,98 @@ async def set_panel_field(
     )
     await session.flush()
     return panel, True
+
+
+async def _resolve_reseller(session: AsyncSession, reseller_id: int | None) -> Reseller | None:
+    """Rivenditore attivo, oppure None per «Diretto»."""
+    if reseller_id is None:
+        return None
+    reseller = await session.get(Reseller, reseller_id)
+    if reseller is None or not reseller.active:
+        raise AnagraficaError("rivenditore non trovato o non attivo.")
+    return reseller
+
+
+async def set_line_reseller(
+    session: AsyncSession, line_id: int, reseller_id: int | None
+) -> tuple[Line, bool]:
+    """Passa una linea a un rivenditore, oppure la riporta a «Diretto».
+
+    Il rivenditore vive sulla linea (i pannelli non lo conoscono), quindi il sync
+    non lo sovrascrive: questa modifica sopravvive.
+    """
+    line = await _active_line(session, line_id)
+    reseller = await _resolve_reseller(session, reseller_id)
+    new_id = reseller.id if reseller is not None else None
+
+    if line.reseller_id == new_id:
+        return line, False
+
+    previous = line.reseller_id
+    line.reseller_id = new_id
+    _audit(
+        session,
+        action="line_reseller_set",
+        entity="line",
+        entity_id=line.id,
+        payload={
+            "old": previous,
+            "new": new_id,
+            "reseller": reseller.name if reseller is not None else None,
+        },
+    )
+    await session.flush()
+    return line, True
+
+
+async def set_customer_reseller(
+    session: AsyncSession, customer_id: int, reseller_id: int | None
+) -> tuple[int, int]:
+    """Porta tutte le linee attive del cliente a un rivenditore (o a Diretto).
+
+    Ritorna `(cambiate, considerate)`: un cliente con più linee si sposta in un
+    colpo solo, senza doverle toccare una per una.
+    """
+    customer = await _active_customer(session, customer_id)
+    reseller = await _resolve_reseller(session, reseller_id)
+    new_id = reseller.id if reseller is not None else None
+    name = reseller.name if reseller is not None else None
+
+    lines = list(
+        (
+            await session.scalars(
+                select(Line).where(Line.customer_id == customer.id, Line.deleted_at.is_(None))
+            )
+        ).all()
+    )
+
+    changed = 0
+    for line in lines:
+        if line.reseller_id == new_id:
+            continue
+        previous = line.reseller_id
+        line.reseller_id = new_id
+        changed += 1
+        _audit(
+            session,
+            action="line_reseller_set",
+            entity="line",
+            entity_id=line.id,
+            payload={
+                "old": previous,
+                "new": new_id,
+                "reseller": name,
+                "via": "customer",
+            },
+        )
+
+    if changed:
+        _audit(
+            session,
+            action="customer_reseller_set",
+            entity="customer",
+            entity_id=customer.id,
+            payload={"new": new_id, "reseller": name, "lines": changed},
+        )
+        await session.flush()
+    return changed, len(lines)

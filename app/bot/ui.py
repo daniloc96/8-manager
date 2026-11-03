@@ -121,6 +121,7 @@ def line_keyboard(line: Line, *, is_owner: bool, is_reseller: bool = False) -> I
             ]
         )
         rows.append([InlineKeyboardButton("✏️ Modifica", callback_data=f"edit:{line.id}")])
+        rows.append([InlineKeyboardButton("🔑 Codici", callback_data=f"codes:{line.customer_id}")])
         # La marcatura si mette e si toglie anche qui: il reminder da solo non
         # basta per una linea lontana dalla scadenza.
         if getattr(line, "no_renewal", False):
@@ -233,7 +234,9 @@ def customer_card(overview: CustomerOverview, today: date, *, show_hidden: bool 
     return "\n".join(parts)
 
 
-def customer_keyboard(overview: CustomerOverview) -> InlineKeyboardMarkup:
+def customer_keyboard(
+    overview: CustomerOverview, *, is_owner: bool = False
+) -> InlineKeyboardMarkup:
     rows = [
         [
             InlineKeyboardButton(
@@ -243,5 +246,14 @@ def customer_keyboard(overview: CustomerOverview) -> InlineKeyboardMarkup:
         ]
         for line in overview.lines
     ]
+    if is_owner:
+        rows.append(
+            [
+                InlineKeyboardButton("🔑 Codici", callback_data=f"codes:{overview.customer.id}"),
+                InlineKeyboardButton(
+                    "🏷 Rivenditore", callback_data=f"custres:{overview.customer.id}"
+                ),
+            ]
+        )
     rows.append([InlineKeyboardButton("🏠 Menu", callback_data="menu:home")])
     return InlineKeyboardMarkup(rows)

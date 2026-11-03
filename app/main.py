@@ -16,6 +16,7 @@ from telegram.ext import (
 
 from app import __version__
 from app.bot import (
+    codes,
     common,
     customer,
     editline,
@@ -120,6 +121,10 @@ def build_application() -> Application:
     )
     application.add_handler(CallbackQueryHandler(editline.on_callback, pattern=r"^edit:"))
     application.add_handler(CallbackQueryHandler(customer.on_callback, pattern=r"^cust:"))
+    application.add_handler(
+        CallbackQueryHandler(customer.on_reseller_callback, pattern=r"^custres:")
+    )
+    application.add_handler(CallbackQueryHandler(codes.on_callback, pattern=r"^codes:"))
     application.add_handler(CallbackQueryHandler(settings_bot.on_callback, pattern=r"^set:"))
     application.add_handler(CallbackQueryHandler(flagged.on_callback, pattern=r"^nr:"))
     application.add_handler(

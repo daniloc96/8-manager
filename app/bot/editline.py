@@ -15,6 +15,7 @@ from app.services.anagrafica import (
     set_customer_alias,
     set_line_label,
     set_line_notes,
+    set_line_reseller,
     set_panel_field,
 )
 from app.services.queries import get_line
@@ -45,12 +46,14 @@ def _picker(line) -> tuple[str, InlineKeyboardMarkup]:
         "",
         "Scegli il campo da cambiare.",
     ]
+    who = "Diretto" if line.reseller is None else line.reseller.name
     rows = [
         [
             InlineKeyboardButton("Alias", callback_data=f"edit:{line.id}:alias"),
             InlineKeyboardButton("Etichetta", callback_data=f"edit:{line.id}:label"),
         ],
         [InlineKeyboardButton("Note", callback_data=f"edit:{line.id}:notes")],
+        [InlineKeyboardButton(f"🏷 Rivenditore · {who}", callback_data=f"edit:{line.id}:reseller")],
     ]
     if line.panel_lines:
         rows.append(
@@ -88,6 +91,44 @@ def _tech_picker(line) -> tuple[str, InlineKeyboardMarkup]:
     )
     rows.append([InlineKeyboardButton("⬅️ Modifica", callback_data=f"edit:{line.id}")])
     return "\n".join(body), InlineKeyboardMarkup(rows)
+
+
+async def _ask_reseller(query, line_id: int) -> None:
+    """Elenco dei rivenditori attivi, più «Diretto» per togliere l'assegnazione."""
+    from sqlalchemy import select
+
+    from app.models import Reseller
+    from app.services.queries import get_line
+
+    async with session_scope() as session:
+        line = await get_line(session, line_id)
+        if line is None:
+            await query.edit_message_text("Linea non trovata o disattivata.")
+            return
+        resellers = list(
+            (await session.scalars(select(Reseller).where(Reseller.active.is_(True)))).all()
+        )
+        current = "Diretto" if line.reseller is None else line.reseller.name
+        title = ui.line_title(line)
+
+    rows = [[InlineKeyboardButton("Diretto (io)", callback_data=f"edit:{line_id}:rset:0")]]
+    for reseller in resellers:
+        mark = "✓ " if reseller.name == current else ""
+        rows.append(
+            [
+                InlineKeyboardButton(
+                    f"{mark}{reseller.name}", callback_data=f"edit:{line_id}:rset:{reseller.id}"
+                )
+            ]
+        )
+    rows.append(_cancel_row(line_id))
+    await query.edit_message_text(
+        f"🏷 <b>Rivenditore</b> · {ui.esc(title)}\n\n"
+        f"Ora: <b>{ui.esc(current)}</b>\n"
+        "Scegli a chi va la linea.",
+        parse_mode=ParseMode.HTML,
+        reply_markup=InlineKeyboardMarkup(rows),
+    )
 
 
 def _prompt(line, field: str, platform: Platform | None = None) -> str:
@@ -203,6 +244,27 @@ async def on_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
 
     if action == "tech":
         await _ask_tech(query, line_id)
+        return
+
+    if action == "reseller":
+        await _ask_reseller(query, line_id)
+        return
+
+    if action == "rset" and len(parts) > 3 and parts[3].isdigit():
+        from app.bot.lines import send_card
+
+        reseller_id = int(parts[3]) or None
+        async with session_scope() as session:
+            try:
+                line, changed = await set_line_reseller(session, line_id, reseller_id)
+            except AnagraficaError as exc:
+                await query.edit_message_text(f"⚠️ {ui.esc(exc)}")
+                return
+            who = "Diretto" if line.reseller is None else ui.esc(line.reseller.name)
+
+        mark = "✅ Passata a" if changed else "🔄 Già assegnata a"
+        note = f"{mark} <b>{who}</b>"
+        await send_card(update, context, line_id, note=note)
         return
 
     if action in TEXT_FIELDS:

@@ -74,14 +74,15 @@ scade il 13/11/2026 (tra 11 giorni)
 
 [✅ Rinnova] [💶 Prezzo]
 [✏️ Modifica]
+[🔑 Codici]
 [🚫 Non rinnovare]
 [🕘 Storico] [👤 Cliente]
 [🔎 Cerca]
 [🏠 Menu]
 ```
 
-**Modifica** apre l'elenco dei campi: Alias, Etichetta, Note e, se la linea ha
-righe di pannello, **Dati pannello** (ID e codice per ciascun pannello, con il
+**Modifica** apre l'elenco dei campi: Alias, Etichetta, Note, **Rivenditore** e,
+se la linea ha righe di pannello, **Dati pannello** (ID e codice per ciascun pannello, con il
 valore attuale accanto). Si cambia un campo alla volta; `-` svuota il campo.
 L'etichetta deve restare unica fra le linee attive dello stesso cliente: se è
 già presa il bot lo dice e lascia lo stato in attesa, così si corregge senza
@@ -102,7 +103,20 @@ alias: "Mario il rosso"
 • Linea 3 — scade il 01/01/2027 · 7,00 €
 
 [Linea 1 · 13/11] [Linea 2 · 01/12] [Linea 3 · 01/01]
+[🔑 Codici] [🏷 Rivenditore]
 ```
+
+**🏷 Rivenditore** sposta **tutte le linee attive** del cliente su un rivenditore,
+o le riporta a «Diretto»; il rivenditore vive sulla linea, quindi il `/sync` non
+lo sovrascrive. Ogni linea cambiata lascia una voce in `audit_log`, più una voce
+di riepilogo sul cliente. Per una singola linea si usa la stessa voce dentro
+**Modifica** dalla scheda linea.
+
+**🔑 Codici** mostra quello che il sync ha salvato per ogni pannello della linea:
+username, password, codice di accesso, ID e scadenza del pannello. I pannelli non
+espongono gli stessi campi: 8TV+ non ha password (si accede con il codice, che
+coincide con lo username), il VOD non ha codice di accesso. Il pulsante è solo
+per l'owner.
 
 ### Rinnovo
 
