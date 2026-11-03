@@ -74,6 +74,10 @@ async def on_text(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     if message is None or message.text is None or user is None or chat is None:
         return
     if chat.type != "private":
+        # In gruppo l'unico testo atteso è la ricerca del menu.
+        from app.bot.group_menu import handle_text as handle_group_text
+
+        await handle_group_text(update, context)
         return
     from app.bot.editline import handle_text as handle_edit_text
     from app.bot.newline import handle_text as handle_new_text

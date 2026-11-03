@@ -38,8 +38,9 @@ def bot_session_factory(engine, monkeypatch):
 
 
 class FakeMessage:
-    def __init__(self) -> None:
+    def __init__(self, text: str | None = None) -> None:
         self.sent: list[tuple[str, object]] = []
+        self.text = text
 
     async def reply_html(self, text, **kwargs):
         if "parse_mode" in kwargs:
@@ -132,7 +133,12 @@ async def test_start_in_group_shows_the_keyboard(session, bot_session_factory) -
     assert handled is True
     body, markup = update.effective_message.sent[-1]
     assert "Scadenze" in body and "Rinnovo" in body
-    assert _callbacks(markup) == ["gmenu:due", "gmenu:renew", "gmenu:help"]
+    assert _callbacks(markup) == [
+        "gmenu:due",
+        "gmenu:renew",
+        "gmenu:search",
+        "gmenu:help",
+    ]
 
 
 async def test_start_in_unlinked_group_explains_what_is_missing(
@@ -161,7 +167,12 @@ async def test_owner_sees_the_same_menu_in_the_group(session, bot_session_factor
     assert handled is True
     body, markup = update.effective_message.sent[-1]
     assert "Mario" in body
-    assert _callbacks(markup) == ["gmenu:due", "gmenu:renew", "gmenu:help"]
+    assert _callbacks(markup) == [
+        "gmenu:due",
+        "gmenu:renew",
+        "gmenu:search",
+        "gmenu:help",
+    ]
 
 
 async def _three_sources(session):
@@ -223,6 +234,112 @@ async def test_owner_in_group_scadenze_shows_only_that_reseller(
     body = update.callback_query.edits[-1]
     assert "Cliente a" in body
     assert "Cliente b" not in body and "Cliente diretto" not in body
+
+
+def text_update(text: str, chat):
+    return SimpleNamespace(
+        callback_query=None,
+        effective_user=SimpleNamespace(id=7771, first_name="Mario", full_name="Mario Rossi"),
+        effective_chat=chat,
+        effective_message=FakeMessage(text),
+    )
+
+
+async def test_search_button_asks_for_a_name(session, bot_session_factory) -> None:
+    await _seed(session)
+    update = callback_update("gmenu:search", GROUP)
+    context = SimpleNamespace(user_data={})
+
+    await group_menu.on_callback(update, context)
+
+    assert "Chi cerchi?" in update.callback_query.edits[-1]
+    assert context.user_data["awaiting"] == group_menu.SEARCH_HINT
+
+
+async def test_search_finds_customers_with_two_buttons(session, bot_session_factory) -> None:
+    await _three_sources(session)
+    update = callback_update("gmenu:search", GROUP)
+    context = SimpleNamespace(user_data={})
+    await group_menu.on_callback(update, context)
+
+    typed = text_update("cliente", GROUP)
+    handled = await group_menu.handle_text(typed, context)
+
+    assert handled is True
+    assert "awaiting" not in context.user_data
+    body, markup = typed.effective_message.sent[-1]
+    assert "Cliente a" in body
+    assert "Cliente b" not in body and "Cliente diretto" not in body
+    callbacks = _callbacks(markup)
+    assert len([c for c in callbacks if c.startswith("gcard:")]) == 1
+    assert len([c for c in callbacks if c.startswith("grenew:")]) == 1
+    assert callbacks[-1] == "gmenu:home"
+
+
+async def test_search_with_no_hits_says_so(session, bot_session_factory) -> None:
+    await _seed(session)
+    context = SimpleNamespace(user_data={"awaiting": group_menu.SEARCH_HINT})
+    typed = text_update("nessuno", GROUP)
+
+    handled = await group_menu.handle_text(typed, context)
+
+    assert handled is True
+    body, _markup = typed.effective_message.sent[-1]
+    assert "Nessun cliente trovato" in body
+
+
+async def test_text_without_search_pending_is_ignored(session, bot_session_factory) -> None:
+    await _seed(session)
+    typed = text_update("ciao", GROUP)
+
+    handled = await group_menu.handle_text(typed, SimpleNamespace(user_data={}))
+
+    assert handled is False
+    assert typed.effective_message.sent == []
+
+
+async def test_card_shows_lines_without_prices(session, bot_session_factory) -> None:
+    lines = await _three_sources(session)
+    customer_id = await _customer_of(session, lines["a"])
+    update = callback_update(f"gcard:{customer_id}", GROUP)
+
+    await group_menu.on_callback(update, SimpleNamespace(user_data={}))
+
+    body = update.callback_query.edits[-1]
+    assert "Cliente a" in body
+    assert "€" not in body, "in gruppo i prezzi restano in privato"
+    callbacks = _callbacks(update.callback_query.markup)
+    assert f"greq:{lines['a']}" in callbacks
+    assert callbacks[-1] == "gmenu:home"
+
+
+async def test_card_refuses_a_customer_of_another_reseller(session, bot_session_factory) -> None:
+    lines = await _three_sources(session)
+    customer_id = await _customer_of(session, lines["b"])
+    update = callback_update(f"gcard:{customer_id}", GROUP)
+
+    await group_menu.on_callback(update, SimpleNamespace(user_data={}))
+
+    assert "non disponibile in questo gruppo" in update.callback_query.edits[-1]
+
+
+async def test_renew_for_customer_lists_only_their_lines(session, bot_session_factory) -> None:
+    lines = await _three_sources(session)
+    customer_id = await _customer_of(session, lines["a"])
+    update = callback_update(f"grenew:{customer_id}", GROUP)
+
+    await group_menu.on_callback(update, SimpleNamespace(user_data={}))
+
+    assert "Quale linea di Cliente a" in update.callback_query.edits[-1]
+    callbacks = _callbacks(update.callback_query.markup)
+    assert [c for c in callbacks if c.startswith("greq:")] == [f"greq:{lines['a']}"]
+
+
+async def _customer_of(session, line_id: int) -> int:
+    from app.models import Line
+
+    line = await session.get(Line, line_id)
+    return line.customer_id
 
 
 async def test_start_in_private_is_not_handled(session, bot_session_factory) -> None:
