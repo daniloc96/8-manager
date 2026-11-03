@@ -164,6 +164,67 @@ async def test_owner_sees_the_same_menu_in_the_group(session, bot_session_factor
     assert _callbacks(markup) == ["gmenu:due", "gmenu:renew", "gmenu:help"]
 
 
+async def _three_sources(session):
+    """Linea del gruppo A, linea del gruppo B, linea diretta: tutte in scadenza."""
+    today = date.today()
+    out = {}
+    for key, group_id in (("a", GROUP_ID), ("b", OTHER_GROUP), ("diretto", None)):
+        reseller = None
+        if group_id is not None:
+            reseller = Reseller(
+                name=f"Reseller {key}",
+                name_key=f"reseller {key}",
+                group_chat_id=group_id,
+                active=True,
+                notify=True,
+            )
+            session.add(reseller)
+            await session.flush()
+        customer = Customer(name=f"Cliente {key}", search_key=customer_search_key(f"Cliente {key}"))
+        session.add(customer)
+        await session.flush()
+        line = Line(
+            customer=customer,
+            service=Service.LIVE,
+            monthly_price_cents=500,
+            started_on=date(2025, 1, 1),
+            expires_on=today,
+            anchor_day=1,
+            reseller_id=reseller.id if reseller else None,
+        )
+        session.add(line)
+        await session.flush()
+        out[key] = line.id
+    await session.commit()
+    return out
+
+
+async def test_owner_in_group_sees_only_that_reseller(session, bot_session_factory) -> None:
+    lines = await _three_sources(session)
+    update = callback_update("gmenu:renew", GROUP)
+    update.effective_user = SimpleNamespace(id=OWNER_ID, first_name="Danilo", full_name="Danilo")
+
+    await group_menu.on_callback(update, SimpleNamespace(user_data={}))
+
+    callbacks = _callbacks(update.callback_query.markup)
+    offered = [c for c in callbacks if c.startswith("greq:")]
+    assert offered == [f"greq:{lines['a']}"]
+
+
+async def test_owner_in_group_scadenze_shows_only_that_reseller(
+    session, bot_session_factory
+) -> None:
+    await _three_sources(session)
+    update = callback_update("gmenu:due", GROUP)
+    update.effective_user = SimpleNamespace(id=OWNER_ID, first_name="Danilo", full_name="Danilo")
+
+    await group_menu.on_callback(update, SimpleNamespace(user_data={}))
+
+    body = update.callback_query.edits[-1]
+    assert "Cliente a" in body
+    assert "Cliente b" not in body and "Cliente diretto" not in body
+
+
 async def test_start_in_private_is_not_handled(session, bot_session_factory) -> None:
     await _seed(session)
     chat = SimpleNamespace(id=7771, type="private")
