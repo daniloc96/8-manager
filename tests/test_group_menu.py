@@ -298,6 +298,35 @@ async def test_text_without_search_pending_is_ignored(session, bot_session_facto
     assert typed.effective_message.sent == []
 
 
+async def test_cerca_command_uses_group_scoped_search(session, bot_session_factory) -> None:
+    """`/cerca nome` in gruppo: stesso risultato del menu, senza privacy off."""
+    from app.bot import search
+
+    await _three_sources(session)
+    update = text_update("/cerca cliente", GROUP)
+    update.effective_message = FakeMessage("/cerca cliente")
+    context = SimpleNamespace(user_data={}, args=["cliente"])
+
+    await search.cerca(update, context)
+
+    body, markup = update.effective_message.sent[-1]
+    assert "Cliente a" in body
+    assert "Cliente b" not in body and "Cliente diretto" not in body
+    assert len([c for c in _callbacks(markup) if c.startswith("gcard:")]) == 1
+
+
+async def test_cerca_command_without_name_says_how_to_use_it(session, bot_session_factory) -> None:
+    from app.bot import search
+
+    update = text_update("/cerca", GROUP)
+    update.effective_message = FakeMessage("/cerca")
+
+    await search.cerca(update, SimpleNamespace(user_data={}, args=[]))
+
+    body, _markup = update.effective_message.sent[-1]
+    assert "/cerca nome del cliente" in body
+
+
 async def test_card_shows_lines_without_prices(session, bot_session_factory) -> None:
     lines = await _three_sources(session)
     customer_id = await _customer_of(session, lines["a"])

@@ -56,6 +56,19 @@ async def run_search(update: Update, context: ContextTypes.DEFAULT_TYPE, query: 
 
 async def cerca(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     query = " ".join(context.args or []).strip()
+    chat = update.effective_chat
+    if chat is not None and chat.type != "private":
+        # In gruppo la ricerca passa dal menu: solo le linee del rivenditore
+        # collegato e senza prezzi. Funziona anche con la privacy attiva.
+        from app.bot.group_menu import search_in_group
+
+        if not query:
+            message = update.effective_message
+            if message is not None:
+                await message.reply_html("Scrivi <code>/cerca nome del cliente</code>.")
+            return
+        await search_in_group(update, context, query)
+        return
     if not query:
         message = update.effective_message
         if message is not None:

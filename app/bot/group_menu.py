@@ -292,11 +292,26 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE) -> boo
         return False
 
     context.user_data.pop("awaiting", None)
+    await search_in_group(update, context, text)
+    return True
+
+
+async def search_in_group(update: Update, context: ContextTypes.DEFAULT_TYPE, text: str) -> None:
+    """Ricerca nel gruppo: solo le linee del rivenditore collegato alla chat.
+
+    Usata sia dal pulsante «Cerca cliente» (testo libero) sia da `/cerca nome`,
+    che funziona anche con la privacy dei bot attiva.
+    """
+    chat = update.effective_chat
+    message = update.effective_message
+    if chat is None or message is None or not is_group(chat.type):
+        return
+
     async with session_scope() as session:
         found = await _reseller_of_chat(update, session)
         if found is None:
             await message.reply_html("Questo gruppo non è collegato a un rivenditore.")
-            return True
+            return
         reseller_id, _name = found
         lines = await search_lines(session, text, reseller_id=reseller_id, limit=40)
 
@@ -308,7 +323,7 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE) -> boo
             f"Nessun cliente trovato per «{ui.esc(text)}».",
             reply_markup=_back(),
         )
-        return True
+        return
 
     parts = [f"🔎 <b>Risultati per «{ui.esc(text)}»</b>", ""]
     buttons = []
@@ -328,4 +343,3 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE) -> boo
         "\n".join(parts),
         reply_markup=InlineKeyboardMarkup(buttons),
     )
-    return True
