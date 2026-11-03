@@ -15,10 +15,10 @@ Differenze rispetto alla specifica originale:
   genera dalle credenziali;
 - il rinnovo non «resta in attesa di conferma pannello»: il sync successivo
   riallinea comunque la scadenza e l'eventuale differenza appare nel report;
-- il job delle 09:00 manda il riepilogo all'owner (con le eccezioni da rivedere)
-  e, per ogni rivenditore con `telegram_user_id` e `notify`, solo le sue linee;
-  la deduplica è per chat, quindi owner e rivenditore possono ricevere la stessa
-  linea senza doppioni.
+- il job delle 09:00 manda **all'owner solo le linee a gestione diretta** (senza
+  rivenditore) con le eccezioni da rivedere, e a ogni rivenditore (gruppo o
+  `telegram_user_id`) solo le sue linee: ogni scadenza arriva a chi la gestisce,
+  mai due volte.
 
 ## Owner
 
@@ -286,10 +286,16 @@ All'owner:
 
 Ogni giorno alle 09:00 Europe/Rome:
 
-- owner: riepilogo completo, raggruppato per rivenditore;
-- rivenditore: solo le sue linee;
-- nessun messaggio se non c'è nulla;
+- **owner**: solo le linee a **gestione diretta** (`reseller_id` nullo), più le
+  eccezioni da rivedere delle sue linee;
+- **gruppo del rivenditore**: solo le linee di quel rivenditore, nella finestra
+  `reminder_days`, con i pulsanti «🔁 Richiedi»;
+- **privato del rivenditore**: solo le sue linee, se ha `telegram_user_id`;
+- nessun messaggio se la lista è vuota;
 - deduplica per (tipo, linea, chat, giorno).
+
+Così la scadenza di un cliente del rivenditore non arriva all'owner: la vede
+quando vuole con «📅 Tutte le scadenze».
 
 ### Anomalie del sync
 

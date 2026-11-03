@@ -186,6 +186,10 @@ dominio, non cliente.
 
 ## Aggiunto il 2026-11-03
 
+- **Reminder separati per gestione**: alle 09:00 l'owner riceve solo le linee
+  dirette («⏰ Scadenze dirette»), i rivenditori le loro nel gruppo o in
+  privato. Prima l'owner riceveva tutto il parco, comprese le scadenze dei
+  clienti dei rivenditori.
 - **Anomalie del sync gestibili una alla volta** (owner, in privato). Il `/sync`
   riportava quali righe avevano qualcosa che non torna ma non si poteva fare
   niente: ora il sync salva le review che hanno una linea, `/anomalie` le elenca

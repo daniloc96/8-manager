@@ -11,6 +11,7 @@ from app.models import (
     Customer,
     Line,
     Notification,
+    Reseller,
     ReviewException,
     Service,
 )
@@ -196,8 +197,74 @@ async def test_reseller_reminder_only_their_lines(engine) -> None:
         for b in row
     )
 
-    # l'owner vede entrambe, e il dedupe è per chat
-    owner_payload = await build_owner_reminder(TODAY, factory=factory)
-    assert owner_payload is not None
-    assert "Mario Rossi" in owner_payload[0]
-    assert "Anna Bianchi" in owner_payload[0]
+    # L'owner non riceve le scadenze dei rivenditori: quelle sono del gruppo.
+    assert await build_owner_reminder(TODAY, factory=factory) is None
+
+
+async def test_owner_reminder_has_only_direct_lines(engine) -> None:
+    """Le linee dei rivenditori vanno a loro: all'owner restano le dirette."""
+    factory = async_sessionmaker(engine, expire_on_commit=False)
+    async with factory() as session:
+        reseller = Reseller(name="Luca", name_key="luca")
+        direct = Customer(name="Diretto Uno", search_key="diretto uno")
+        theirs = Customer(name="Cliente Rivenditore", search_key="cliente rivenditore")
+        session.add_all([reseller, direct, theirs])
+        await session.flush()
+        session.add_all(
+            [
+                Line(
+                    customer=direct,
+                    service=Service.LIVE,
+                    monthly_price_cents=1000,
+                    started_on=date(2025, 1, 1),
+                    expires_on=TODAY,
+                    anchor_day=1,
+                ),
+                Line(
+                    customer=theirs,
+                    service=Service.LIVE_VOD,
+                    monthly_price_cents=700,
+                    started_on=date(2025, 1, 1),
+                    expires_on=TODAY,
+                    anchor_day=1,
+                    reseller_id=reseller.id,
+                ),
+            ]
+        )
+        await session.commit()
+
+    payload = await build_owner_reminder(TODAY, factory=factory)
+
+    assert payload is not None
+    body, markup = payload
+    assert "Scadenze dirette" in body
+    assert "Diretto Uno" in body
+    assert "Cliente Rivenditore" not in body
+    callbacks = [button.callback_data for row in markup.inline_keyboard for button in row]
+    assert not any((data or "").startswith("greq:") for data in callbacks)
+
+
+async def test_owner_reminder_skips_reseller_exception(engine) -> None:
+    factory = async_sessionmaker(engine, expire_on_commit=False)
+    async with factory() as session:
+        reseller = Reseller(name="Luca", name_key="luca")
+        customer = Customer(name="Cliente Rivenditore", search_key="cliente rivenditore")
+        session.add_all([reseller, customer])
+        await session.flush()
+        line = Line(
+            customer=customer,
+            service=Service.LIVE,
+            monthly_price_cents=700,
+            started_on=date(2025, 1, 1),
+            expires_on=date(2027, 5, 1),
+            anchor_day=1,
+            reseller_id=reseller.id,
+        )
+        session.add(line)
+        await session.flush()
+        session.add(
+            ReviewException(line_id=line.id, reason="decidere col cliente", review_on=TODAY)
+        )
+        await session.commit()
+
+    assert await build_owner_reminder(TODAY, factory=factory) is None

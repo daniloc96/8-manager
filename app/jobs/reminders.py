@@ -54,9 +54,16 @@ async def build_reminder(
     reseller_id: int | None = None,
     chat_id: int,
     include_exceptions: bool = True,
+    direct_only: bool = False,
     factory=None,
 ) -> tuple[str, InlineKeyboardMarkup] | None:
-    """Riepilogo scadenze per una chat: owner (tutte) o rivenditore (le sue)."""
+    """Riepilogo scadenze per una chat.
+
+    `reseller_id` limita a un rivenditore; `direct_only` limita alle linee
+    gestite direttamente dall'owner (senza rivenditore). Le due cose non si
+    usano insieme: il gruppo e il privato del rivenditore hanno le loro linee,
+    l'owner le sue, così nessuno riceve due volte la stessa scadenza.
+    """
     settings = get_settings()
     warn_days = settings.reminder_days
     session_factory = factory or get_session_factory()
@@ -67,10 +74,13 @@ async def build_reminder(
         flagged: list[tuple[int, str]] = []
         flagged_ids: set[int] = set()
         lines = list((await session.scalars(select(Line).where(Line.deleted_at.is_(None)))).all())
+        reseller_of = {line.id: line.reseller_id for line in lines}
         for line in lines:
             if line.id in muted:
                 continue
             if reseller_id is not None and line.reseller_id != reseller_id:
+                continue
+            if direct_only and line.reseller_id is not None:
                 continue
             # La marcatura si vede sempre, anche se la linea è lontana dalla
             # scadenza: serve come promemoria di non rinnovare.
@@ -93,6 +103,8 @@ async def build_reminder(
         ):
             if not is_due(record, today):
                 continue
+            if direct_only and reseller_of.get(record.line_id) is not None:
+                continue
             if not await _claim(
                 session,
                 kind=KIND_EXCEPTION,
@@ -108,7 +120,8 @@ async def build_reminder(
     if not due and not exceptions and not flagged:
         return None
 
-    body = [f"⏰ <b>Scadenze</b> · {ui.italian_date(today)}", ""]
+    heading = "⏰ <b>Scadenze dirette</b>" if direct_only else "⏰ <b>Scadenze</b>"
+    body = [f"{heading} · {ui.italian_date(today)}", ""]
     body.extend(f"• {ui.esc(title)} — {ui.esc(phrase)}" for _id, title, phrase in due)
     if flagged:
         body.append("")
@@ -266,10 +279,16 @@ def _short_title(title: str, limit: int = 26) -> str:
 async def build_owner_reminder(
     today: date, *, factory=None
 ) -> tuple[str, InlineKeyboardMarkup] | None:
-    """Scorciatoia usata dai test: riepilogo completo per l'owner."""
+    """Riepilogo per l'owner: solo le linee a gestione diretta.
+
+    Le scadenze dei rivenditori arrivano al loro gruppo (o al loro privato),
+    non all'owner: sono cose da gestire là. L'owner le vede quando vuole con
+    «📅 Tutte le scadenze».
+    """
     return await build_reminder(
         today,
         chat_id=get_settings().owner_telegram_id or 0,
+        direct_only=True,
         factory=factory,
     )
 
