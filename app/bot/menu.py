@@ -41,7 +41,9 @@ async def _target(update: Update):
     if query is not None:
         return query.edit_message_text
     message = update.effective_message
-    return message.reply_html if message is not None else None
+    if message is None:
+        return None
+    return ui.html_target(message)
 
 
 async def _access_of(update: Update):

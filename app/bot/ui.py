@@ -22,6 +22,21 @@ PLATFORM_SHORT = {
 }
 
 
+def html_target(message):
+    """Callable che scrive in HTML accettando anche `parse_mode`.
+
+    `Message.reply_html` imposta il parse mode da sé e non lo accetta come
+    parametro: i flussi che scrivono sia da bottone sia da comando passano di
+    qui, così lo stesso codice funziona in entrambi i casi.
+    """
+
+    async def reply(text, **kwargs):
+        kwargs.pop("parse_mode", None)
+        return await message.reply_html(text, **kwargs)
+
+    return reply
+
+
 def esc(value: object) -> str:
     return html.escape(str(value))
 

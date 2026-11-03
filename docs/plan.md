@@ -173,6 +173,17 @@ genera da `vod_domain` + username e password della linea (vedi
 `docs/panels-api.md`). Per questo non compare nel menu **Modifica**: cambia
 dominio, non cliente.
 
+## Corretto il 2026-11-03
+
+- **`/collega` e `/richiedi` sollevavano `TypeError`**: `Message.reply_html` di
+  PTB imposta il parse mode da sé e non lo accetta come parametro. Il comando
+  falliva a fine lavoro (gruppo collegato, poi eccezione); `/impostazioni` da
+  comando aveva lo stesso difetto latente. Ora esiste `ui.html_target`, che
+  accetta `parse_mode` e lo toglie prima di `reply_html`, e due test statici
+  vietano sia `reply_html(..., parse_mode=...)` sia `reply_html` usato come
+  callable: i finti messaggi dei test hanno la firma vera, quindi il difetto
+  non può ripassare.
+
 ## Corretto il 2026-11-02 (notte)
 
 - **Le viste del menu sollevavano `TypeError`**: `menu._target` era sincrona e
@@ -199,7 +210,7 @@ Debito tecnico noto:
 ```bash
 uv sync                                  # dipendenze
 uv run ruff check . && uv run ruff format --check .
-uv run pytest -q                         # 239 test al 2026-11-03
+uv run pytest -q                         # 245 test al 2026-11-03
 ./scripts/deploy.sh --apply              # produzione
 ./scripts/verify.sh
 ```

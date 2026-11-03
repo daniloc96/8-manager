@@ -62,7 +62,7 @@ async def ask_which_line(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         message = update.effective_message
         if message is None:
             return
-        target = message.reply_html
+        target = ui.html_target(message)
 
     user = update.effective_user
     if user is None:
@@ -475,7 +475,6 @@ async def collega(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         f"✅ Gruppo collegato a <b>{ui.esc(name)}</b>.\n\n"
         "Qui bastano i comandi indirizzati: <code>/scadenze@bot</code> e "
         "<code>/richiedi@bot</code>. I prezzi e le modifiche restano in privato.",
-        parse_mode=ParseMode.HTML,
     )
 
 
