@@ -216,6 +216,39 @@ async def _submit(update, context, line_id: int, months: int, *, editing) -> Non
             logger.exception("Richiesta %s: invio all'owner fallito", request.id)
 
 
+async def _announce_outcome(
+    context,
+    *,
+    request_id: int,
+    text: str,
+    requester: int | None,
+    origin: int | None,
+) -> None:
+    """Esito al gruppo da cui è partita la richiesta, e al richiedente.
+
+    Se la richiesta è nata in un gruppo l'esito va **nel gruppo**: è lì che il
+    rivenditore l'ha chiesta e lì che deve vederlo. Il privato al richiedente
+    serve solo se la richiesta è nata in privato o se chi ha premuto non è
+    l'owner (che l'esito lo ha già davanti).
+    """
+    if context.bot is None:
+        return
+
+    targets: list[int] = []
+    if origin is not None:
+        targets.append(origin)
+    if requester and requester not in targets:
+        owner_id = get_settings().owner_telegram_id
+        if origin is None or requester != owner_id:
+            targets.append(requester)
+
+    for chat_id in targets:
+        try:
+            await context.bot.send_message(chat_id=chat_id, text=text, parse_mode=ParseMode.HTML)
+        except Exception:
+            logger.warning("Richiesta %s: esito non consegnato a %s", request_id, chat_id)
+
+
 async def approve(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     query = update.callback_query
     if query is None or query.data is None:
@@ -256,21 +289,17 @@ async def approve(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         parse_mode=ParseMode.HTML,
     )
 
-    if context.bot is not None:
-        text = (
-            "✅ <b>Rinnovo confermato</b>\n\n"
-            f"{ui.esc(title)}\n{months} {_period(months)} · scade {ui.italian_date(expires)}"
-        )
-        try:
-            await context.bot.send_message(chat_id=requester, text=text, parse_mode=ParseMode.HTML)
-        except Exception:
-            logger.warning("Approvazione %s: avviso al rivenditore fallito", request_id)
-
-        if origin is not None and origin != requester:
-            try:
-                await context.bot.send_message(chat_id=origin, text=text, parse_mode=ParseMode.HTML)
-            except Exception:
-                logger.warning("Approvazione %s: avviso al gruppo fallito", request_id)
+    await _announce_outcome(
+        context,
+        request_id=request_id,
+        text=(
+            "✅ <b>Rinnovo approvato</b>\n\n"
+            f"{ui.esc(title)}\n{months} {_period(months)} · "
+            f"nuova scadenza {ui.italian_date(expires)}"
+        ),
+        requester=requester,
+        origin=origin,
+    )
 
 
 async def reject(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -297,21 +326,23 @@ async def reject(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         line = await get_line(session, request.line_id)
         title = ui.line_title(line) if line is not None else f"linea {request.line_id}"
         requester = request.requested_by_telegram_id
+        origin = request.origin_chat_id
 
     await query.answer("Richiesta rifiutata")
     await query.edit_message_text(
         f"🚫 <b>Richiesta rifiutata</b>\n\n{ui.esc(title)}",
         parse_mode=ParseMode.HTML,
     )
-    if context.bot is not None:
-        try:
-            await context.bot.send_message(
-                chat_id=requester,
-                text=f"🚫 Richiesta di rinnovo rifiutata per {ui.esc(title)}.",
-                parse_mode=ParseMode.HTML,
-            )
-        except Exception:
-            logger.warning("Rifiuto %s: avviso al rivenditore fallito", request_id)
+    await _announce_outcome(
+        context,
+        request_id=request_id,
+        text=(
+            "🚫 <b>Richiesta rifiutata</b>\n\n"
+            f"{ui.esc(title)}\n<i>La linea resta com'è: nessun rinnovo registrato.</i>"
+        ),
+        requester=requester,
+        origin=origin,
+    )
 
 
 async def authorize(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:

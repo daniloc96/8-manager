@@ -122,13 +122,13 @@ async def _seed(session):
     return reseller_row, line
 
 
-async def _make_request(session, line) -> RenewalRequest:
+async def _make_request(session, line, *, origin=GROUP_ID, requester=999) -> RenewalRequest:
     request = RenewalRequest(
         line_id=line.id,
-        requested_by_telegram_id=999,
+        requested_by_telegram_id=requester,
         months=2,
         status=RequestStatus.PENDING,
-        origin_chat_id=GROUP_ID,
+        origin_chat_id=origin,
     )
     session.add(request)
     await session.commit()
@@ -251,3 +251,62 @@ async def test_approve_from_the_notification_creates_the_renewal(
         assert len(renewals) == 1
         renewed = await get_line(check, line.id)
         assert renewed.expires_on > date(2026, 11, 3)
+
+
+async def _reject_request(session, request, bot):
+    update = SimpleNamespace(
+        callback_query=FakeQuery(f"rqr:{request.id}"),
+        effective_user=SimpleNamespace(id=OWNER_ID, first_name="Danilo"),
+        effective_chat=SimpleNamespace(id=OWNER_ID, type="private"),
+        effective_message=SimpleNamespace(chat=SimpleNamespace(id=OWNER_ID, type="private")),
+    )
+    await reseller.reject(update, SimpleNamespace(user_data={}, bot=bot))
+    return update
+
+
+async def test_reject_is_announced_in_the_group(session, bot_session_factory) -> None:
+    """Il rifiuto deve arrivare nel gruppo: prima non arrivava niente."""
+    _reseller_row, line = await _seed(session)
+    request = await _make_request(session, line)
+    bot = FakeBot()
+
+    await _reject_request(session, request, bot)
+
+    chats = [chat_id for chat_id, _text, _markup in bot.sent]
+    assert GROUP_ID in chats
+    group_text = next(text for chat_id, text, _m in bot.sent if chat_id == GROUP_ID)
+    assert "Richiesta rifiutata" in group_text
+    assert "Angela Mario" in group_text
+    # l'owner ha premuto lui: nessun privato inutile a se stesso
+    assert OWNER_ID not in chats
+
+
+async def test_approve_is_announced_in_the_group(session, bot_session_factory) -> None:
+    _reseller_row, line = await _seed(session)
+    request = await _make_request(session, line, requester=777)
+    bot = FakeBot()
+    update = SimpleNamespace(
+        callback_query=FakeQuery(f"rqa:{request.id}:2"),
+        effective_user=SimpleNamespace(id=OWNER_ID, first_name="Danilo"),
+        effective_chat=SimpleNamespace(id=OWNER_ID, type="private"),
+        effective_message=SimpleNamespace(chat=SimpleNamespace(id=OWNER_ID, type="private")),
+    )
+
+    await reseller.approve(update, SimpleNamespace(user_data={}, bot=bot))
+
+    chats = [chat_id for chat_id, _text, _markup in bot.sent]
+    assert GROUP_ID in chats
+    assert 777 in chats, "il rivenditore che ha chiesto va avvisato in privato"
+    group_text = next(text for chat_id, text, _m in bot.sent if chat_id == GROUP_ID)
+    assert "Rinnovo approvato" in group_text
+    assert "2 mesi" in group_text
+
+
+async def test_private_request_gets_a_private_answer(session, bot_session_factory) -> None:
+    _reseller_row, line = await _seed(session)
+    request = await _make_request(session, line, origin=None, requester=777)
+    bot = FakeBot()
+
+    await _reject_request(session, request, bot)
+
+    assert [chat_id for chat_id, _t, _m in bot.sent] == [777]
