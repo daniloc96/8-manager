@@ -129,13 +129,12 @@ async def test_first_tap_asks_the_period(session, bot_session_factory) -> None:
     assert "Mario Rossi" in text
     assert "scade 04/11/2026" in text
     callbacks = _callbacks(update.callback_query.markup)
+    # Tutti i mesi da 1 a 12: ognuno ha il suo pulsante, niente preset saltati.
     assert callbacks[: len(callbacks) - 1] == [
-        f"greqm:{line.id}:1",
-        f"greqm:{line.id}:2",
-        f"greqm:{line.id}:3",
-        f"greqm:{line.id}:5",
-        f"greqm:{line.id}:12",
+        f"greqm:{line.id}:{months}" for months in range(1, 13)
     ]
+    labels = [button.text for row in update.callback_query.markup.inline_keyboard for button in row]
+    assert labels[:12] == [str(months) for months in range(1, 13)]
     assert callbacks[-1] == f"greqn:{line.id}"
     assert await _requests(bot_session_factory) == []
     assert context.bot.sent == []

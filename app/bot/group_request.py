@@ -100,10 +100,11 @@ async def ask(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 
     presets = get_settings().duration_presets_list
     buttons = [
-        InlineKeyboardButton(f"{months} m", callback_data=f"greqm:{line_id}:{months}")
+        InlineKeyboardButton(f"{months}", callback_data=f"greqm:{line_id}:{months}")
         for months in presets
     ]
-    rows = [buttons[index : index + 3] for index in range(0, len(buttons), 3)]
+    # Griglia 4x3: 1..12 in tre righe, così ogni mese ha il suo tasto.
+    rows = [buttons[index : index + 4] for index in range(0, len(buttons), 4)]
     rows.append([InlineKeyboardButton("✖️ Annulla", callback_data=f"greqn:{line_id}")])
     await editing.edit_text(
         "❓ <b>Quanti mesi vuoi richiedere?</b>\n\n"

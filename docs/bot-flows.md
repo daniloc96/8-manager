@@ -132,10 +132,15 @@ finale di `/nuovo`.
 Il rinnovo si registra dal bot; il conto sul pannello lo rinnova l'owner a mano.
 
 ```
-[✅ Rinnova]  ->  [1 m] [2 m] [3 m]
-                  [5 m] [12 m] [Altro…]
+[✅ Rinnova]  ->  [1] [2] [3] [4]
+                  [5] [6] [7] [8]
+                  [9] [10] [11] [12]
+                  [Altro…]
                   [⬅️ Annulla]
 ```
+
+Ogni mese da 1 a 12 ha il suo pulsante (griglia 4×3): si sceglie esattamente
+quanti mesi servono, senza dover saltare i preset.
 
 **Altro…** chiede i mesi come testo (1–36) e ha «Annulla» per tornare alla
 scheda; aprire la scheda o il menu annulla l'attesa, quindi un numero digitato
@@ -227,10 +232,12 @@ Mario (rivenditore) · Mario Caterino · Linea 1
 Scade 13/11/2026 · richiesti 3 mesi
 Prezzo proposto: 5,00 €/mese · 15,00 €
 
-[1] [2] [3] [5] [12] [Altro] [Rifiuta]
+[1] … [12] [Altro] [Rifiuta]
 ```
 
-L'owner può approvare con una durata diversa da quella richiesta. Alla
+La durata si sceglie con un pulsante per ogni mese da 1 a 12, oppure «Altro…»
+per un valore a testo fino a 36. L'owner può approvare con una durata diversa da
+quella richiesta. Alla
 conferma il rinnovo viene registrato e la risposta torna al rivenditore e nel
 gruppo di origine.
 
@@ -246,15 +253,16 @@ Implementato: un gruppo può essere collegato a un rivenditore.
 
 Regole:
 
-- nel gruppo il bot risponde solo a comandi indirizzati
-  (`/scadenze@bot`, `/richiedi@bot`); `/start` e i testi liberi sono ignorati;
+- nel gruppo il bot risponde a `/start` (menu a pulsanti), a `/cerca <nome>` e
+  ai comandi indirizzati; il testo libero non è una ricerca, così la privacy
+  mode può restare attiva;
 - chiunque nel gruppo collegato vede le scadenze e le ricerche di **quel**
   rivenditore, ma non può modificare nulla: prezzi, rinnovi e
   wizard restano in privato e richiedono l'identità personale (ID Telegram del
   rivenditore o dell'owner), non il gruppo;
 - `/richiedi` in gruppo risponde «ti ho scritto in privato» e manda la scelta
   della linea in chat diretta; la richiesta nasce con `origin_chat_id` del
-  gruppo, così l'approvazione viene confermata anche lì;
+  gruppo, così l'esito di approvazione o rifiuto viene annunciato anche lì;
 - un gruppo può essere collegato a un solo rivenditore: ricollegarlo lo sposta.
 
 ## Onboarding

@@ -23,15 +23,15 @@ def test_settings_presets() -> None:
     settings = Settings(
         _env_file=None,
         price_presets_direct="4, 5, 8, 10",
-        duration_presets="1,2,3,5,12",
+        duration_presets="1,2,3,4,5,6,7,8,9,10,11,12",
     )
     assert settings.direct_price_presets_cents == (400, 500, 800, 1000)
-    assert settings.duration_presets_list == (1, 2, 3, 5, 12)
+    assert settings.duration_presets_list == (1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12)
 
 
 def test_settings_duration_fallback() -> None:
     settings = Settings(_env_file=None, duration_presets="0,99,abc")
-    assert settings.duration_presets_list == (1, 2, 3, 5, 12)
+    assert settings.duration_presets_list == (1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12)
 
 
 def test_settings_invalid_owner_id() -> None:

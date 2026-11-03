@@ -33,7 +33,7 @@ class Settings(BaseSettings):
     reminder_days: int = 3
     reminder_hour: int = 9
     price_presets_direct: str = "4,5,8,10"
-    duration_presets: str = "1,2,3,5,12"
+    duration_presets: str = "1,2,3,4,5,6,7,8,9,10,11,12"
     backup_retention_days: int = 30
 
     # Pannelli (fase P/S)
@@ -66,7 +66,7 @@ class Settings(BaseSettings):
                 continue
             if 1 <= months <= 36:
                 values.append(months)
-        return tuple(values) or (1, 2, 3, 5, 12)
+        return tuple(values) or (1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12)
 
     @property
     def heartbeat_path(self) -> Path:

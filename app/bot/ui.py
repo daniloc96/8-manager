@@ -182,10 +182,10 @@ def line_keyboard(line: Line, *, is_owner: bool, is_reseller: bool = False) -> I
 
 def months_keyboard(line: Line, presets: tuple[int, ...]) -> InlineKeyboardMarkup:
     buttons = [
-        InlineKeyboardButton(f"{months} m", callback_data=f"renew:{line.id}:{months}")
+        InlineKeyboardButton(f"{months}", callback_data=f"renew:{line.id}:{months}")
         for months in presets
     ]
-    rows = [buttons[index : index + 3] for index in range(0, len(buttons), 3)]
+    rows = [buttons[index : index + 4] for index in range(0, len(buttons), 4)]
     rows.append([InlineKeyboardButton("Altro…", callback_data=f"renew:{line.id}:other")])
     rows.append([InlineKeyboardButton("⬅️ Annulla", callback_data=f"card:{line.id}")])
     return InlineKeyboardMarkup(rows)
