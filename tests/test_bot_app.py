@@ -94,6 +94,8 @@ def test_every_callback_matches_exactly_one_handler(monkeypatch) -> None:
         "gmenu:renew",
         "gmenu:home",
         "gcard:5",
+        "gdue:5",
+        "gcod:5",
         "grenew:5",
         "greq:12",
         "greqm:12:3",

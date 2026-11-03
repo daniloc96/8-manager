@@ -187,6 +187,14 @@ async def on_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
             await _show_card(editing, session, query.data, reseller_id)
             return
 
+        if query.data.startswith("gdue:"):
+            await _show_due(editing, session, query.data, reseller_id)
+            return
+
+        if query.data.startswith("gcod:"):
+            await _show_codes(editing, session, query.data, reseller_id)
+            return
+
         if query.data.startswith("grenew:"):
             await _show_customer_renew(editing, session, query.data, reseller_id)
             return
@@ -233,8 +241,28 @@ def _line_buttons(lines, *, include_menu: bool = True) -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(rows)
 
 
+def _customer_actions(customer_id: int, lines) -> InlineKeyboardMarkup:
+    """I tre tasti della scheda cliente, più il ritorno al menu."""
+    rows = [[InlineKeyboardButton("📅 Scadenza", callback_data=f"gdue:{customer_id}")]]
+    rows.append(
+        [
+            InlineKeyboardButton("🔑 Codici", callback_data=f"gcod:{customer_id}"),
+            InlineKeyboardButton("🔁 Rinnovo", callback_data=f"grenew:{customer_id}"),
+        ]
+    )
+    rows.append([InlineKeyboardButton("🏠 Menu", callback_data="gmenu:home")])
+    return InlineKeyboardMarkup(rows)
+
+
+def _credentials_block(line, domain: str | None) -> list[str]:
+    """Codici della linea come li espone il pannello, senza inventare niente."""
+    from app.bot.codes import _line_block
+
+    return _line_block(line, domain)
+
+
 async def _show_card(editing, session, data: str, reseller_id: int) -> None:
-    """Scheda del cliente senza prezzi: le linee e quando scadono."""
+    """Scheda del cliente senza prezzi: nome, linee e quando scadono."""
     customer_id = _customer_id(data)
     overview = (
         await _customer_lines(session, customer_id, reseller_id)
@@ -257,7 +285,86 @@ async def _show_card(editing, session, data: str, reseller_id: int) -> None:
     await editing.edit_text(
         "\n".join(parts),
         parse_mode=ParseMode.HTML,
-        reply_markup=_line_buttons(overview.lines),
+        reply_markup=_customer_actions(customer_id, overview.lines),
+    )
+
+
+def _when(line, today) -> str:
+    """«fra 44 giorni» / «oggi» / «2 giorni fa», senza ripetere la data."""
+    from app.services.months import days_left
+
+    delta = days_left(line.expires_on, today)
+    if delta == 0:
+        return "oggi"
+    if delta == 1:
+        return "domani"
+    if delta > 1:
+        return f"fra {delta} giorni"
+    days = abs(delta)
+    return f"{days} giorno fa" if days == 1 else f"{days} giorni fa"
+
+
+async def _show_due(editing, session, data: str, reseller_id: int) -> None:
+    """«Scadenza»: le stesse informazioni della scheda, in formato date."""
+    customer_id = _customer_id(data)
+    overview = (
+        await _customer_lines(session, customer_id, reseller_id)
+        if customer_id is not None
+        else None
+    )
+    if overview is None:
+        await editing.edit_text("Cliente non disponibile in questo gruppo.", reply_markup=_back())
+        return
+
+    today = _today()
+    parts = [f"📅 <b>Scadenze · {ui.esc(overview.customer.name)}</b>", ""]
+    for line in overview.lines:
+        parts.append(
+            f"• {ui.esc(line.label or 'Linea unica')}: "
+            f"<b>{ui.italian_date(line.expires_on)}</b> — "
+            f"{ui.esc(_when(line, today))}"
+        )
+    await editing.edit_text(
+        "\n".join(parts),
+        parse_mode=ParseMode.HTML,
+        reply_markup=InlineKeyboardMarkup(
+            [
+                [InlineKeyboardButton("⬅️ Cliente", callback_data=f"gcard:{customer_id}")],
+                [InlineKeyboardButton("🏠 Menu", callback_data="gmenu:home")],
+            ]
+        ),
+    )
+
+
+async def _show_codes(editing, session, data: str, reseller_id: int) -> None:
+    """«Codici»: username, password e link delle linee del cliente."""
+    from app.services.settings import read_value
+
+    customer_id = _customer_id(data)
+    overview = (
+        await _customer_lines(session, customer_id, reseller_id)
+        if customer_id is not None
+        else None
+    )
+    if overview is None:
+        await editing.edit_text("Cliente non disponibile in questo gruppo.", reply_markup=_back())
+        return
+
+    domain = await read_value(session, "vod_domain")
+    parts = [f"🔑 <b>Codici · {ui.esc(overview.customer.name)}</b>", ""]
+    for line in overview.lines:
+        parts.extend(_credentials_block(line, domain))
+        parts.append("")
+    parts.append("<i>I valori arrivano dal pannello: quello che non espone resta vuoto.</i>")
+    await editing.edit_text(
+        "\n".join(parts),
+        parse_mode=ParseMode.HTML,
+        reply_markup=InlineKeyboardMarkup(
+            [
+                [InlineKeyboardButton("⬅️ Cliente", callback_data=f"gcard:{customer_id}")],
+                [InlineKeyboardButton("🏠 Menu", callback_data="gmenu:home")],
+            ]
+        ),
     )
 
 
@@ -299,6 +406,9 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE) -> boo
 async def search_in_group(update: Update, context: ContextTypes.DEFAULT_TYPE, text: str) -> None:
     """Ricerca nel gruppo: solo le linee del rivenditore collegato alla chat.
 
+    Un pulsante per cliente, niente elenco di testo: con molti clienti una lista
+    lunga si legge male, e il pulsante è già il «vai a quello lì».
+
     Usata sia dal pulsante «Cerca cliente» (testo libero) sia da `/cerca nome`,
     che funziona anche con la privacy dei bot attiva.
     """
@@ -313,7 +423,7 @@ async def search_in_group(update: Update, context: ContextTypes.DEFAULT_TYPE, te
             await message.reply_html("Questo gruppo non è collegato a un rivenditore.")
             return
         reseller_id, _name = found
-        lines = await search_lines(session, text, reseller_id=reseller_id, limit=40)
+        lines = await search_lines(session, text, reseller_id=reseller_id, limit=60)
 
     grouped: dict[int, list] = {}
     for line in lines:
@@ -325,21 +435,16 @@ async def search_in_group(update: Update, context: ContextTypes.DEFAULT_TYPE, te
         )
         return
 
-    parts = [f"🔎 <b>Risultati per «{ui.esc(text)}»</b>", ""]
     buttons = []
     for customer_id, customer_lines in list(grouped.items())[:MAX_RESULTS]:
-        name = customer_lines[0].customer.name
-        soonest = min(line.expires_on for line in customer_lines)
-        extra = "" if len(customer_lines) == 1 else f" · {len(customer_lines)} linee"
-        parts.append(f"• {ui.esc(name)} — scade {ui.italian_date(soonest)}{extra}")
-        buttons.append(
-            [
-                InlineKeyboardButton("👤 Dettagli", callback_data=f"gcard:{customer_id}"),
-                InlineKeyboardButton("🔁 Rinnovo", callback_data=f"grenew:{customer_id}"),
-            ]
-        )
+        label = customer_lines[0].customer.name
+        if len(customer_lines) > 1:
+            label = f"{label} · {len(customer_lines)}"
+        buttons.append([InlineKeyboardButton(label[:60], callback_data=f"gcard:{customer_id}")])
+    buttons.append([InlineKeyboardButton("🔎 Cerca di nuovo", callback_data="gmenu:search")])
     buttons.append([InlineKeyboardButton("🏠 Menu", callback_data="gmenu:home")])
+    found_word = "cliente trovato" if len(grouped) == 1 else "clienti trovati"
     await message.reply_html(
-        "\n".join(parts),
+        f"🔎 <b>Chi è {ui.esc(text)}?</b>\n\n{len(grouped)} {found_word}: premi il nome.",
         reply_markup=InlineKeyboardMarkup(buttons),
     )

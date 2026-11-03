@@ -256,7 +256,7 @@ async def test_search_button_asks_for_a_name(session, bot_session_factory) -> No
     assert context.user_data["awaiting"] == group_menu.SEARCH_HINT
 
 
-async def test_search_finds_customers_with_two_buttons(session, bot_session_factory) -> None:
+async def test_search_answers_with_one_button_per_customer(session, bot_session_factory) -> None:
     await _three_sources(session)
     update = callback_update("gmenu:search", GROUP)
     context = SimpleNamespace(user_data={})
@@ -268,12 +268,16 @@ async def test_search_finds_customers_with_two_buttons(session, bot_session_fact
     assert handled is True
     assert "awaiting" not in context.user_data
     body, markup = typed.effective_message.sent[-1]
-    assert "Cliente a" in body
-    assert "Cliente b" not in body and "Cliente diretto" not in body
+    assert "Chi è cliente?" in body
+    assert "1 cliente trovato" in body
     callbacks = _callbacks(markup)
+    # un solo pulsante-cliente, e nessun pulsante d'azione nella ricerca
     assert len([c for c in callbacks if c.startswith("gcard:")]) == 1
-    assert len([c for c in callbacks if c.startswith("grenew:")]) == 1
-    assert callbacks[-1] == "gmenu:home"
+    assert not [c for c in callbacks if c.startswith(("grenew:", "gdue:", "gcod:"))]
+    labels = [b.text for row in markup.inline_keyboard for b in row]
+    assert "Cliente a" in labels, "il pulsante è il nome del cliente"
+    assert "Cliente b" not in labels and "Cliente diretto" not in labels
+    assert callbacks[-2:] == ["gmenu:search", "gmenu:home"]
 
 
 async def test_search_with_no_hits_says_so(session, bot_session_factory) -> None:
@@ -309,9 +313,10 @@ async def test_cerca_command_uses_group_scoped_search(session, bot_session_facto
 
     await search.cerca(update, context)
 
-    body, markup = update.effective_message.sent[-1]
-    assert "Cliente a" in body
-    assert "Cliente b" not in body and "Cliente diretto" not in body
+    markup = update.effective_message.sent[-1][1]
+    labels = [b.text for row in markup.inline_keyboard for b in row]
+    assert "Cliente a" in labels
+    assert "Cliente b" not in labels and "Cliente diretto" not in labels
     assert len([c for c in _callbacks(markup) if c.startswith("gcard:")]) == 1
 
 
@@ -327,7 +332,7 @@ async def test_cerca_command_without_name_says_how_to_use_it(session, bot_sessio
     assert "/cerca nome del cliente" in body
 
 
-async def test_card_shows_lines_without_prices(session, bot_session_factory) -> None:
+async def test_card_shows_actions_for_the_customer(session, bot_session_factory) -> None:
     lines = await _three_sources(session)
     customer_id = await _customer_of(session, lines["a"])
     update = callback_update(f"gcard:{customer_id}", GROUP)
@@ -337,9 +342,49 @@ async def test_card_shows_lines_without_prices(session, bot_session_factory) -> 
     body = update.callback_query.edits[-1]
     assert "Cliente a" in body
     assert "€" not in body, "in gruppo i prezzi restano in privato"
-    callbacks = _callbacks(update.callback_query.markup)
-    assert f"greq:{lines['a']}" in callbacks
-    assert callbacks[-1] == "gmenu:home"
+    assert _callbacks(update.callback_query.markup) == [
+        f"gdue:{customer_id}",
+        f"gcod:{customer_id}",
+        f"grenew:{customer_id}",
+        "gmenu:home",
+    ]
+
+
+async def test_card_codes_button_shows_credentials(session, bot_session_factory) -> None:
+    lines = await _three_sources(session)
+    customer_id = await _customer_of(session, lines["a"])
+    update = callback_update(f"gcod:{customer_id}", GROUP)
+
+    await group_menu.on_callback(update, SimpleNamespace(user_data={}))
+
+    body = update.callback_query.edits[-1]
+    assert "Codici · Cliente a" in body
+    assert "€" not in body
+    assert _callbacks(update.callback_query.markup)[0] == f"gcard:{customer_id}"
+
+
+async def test_card_due_button_shows_dates(session, bot_session_factory) -> None:
+    lines = await _three_sources(session)
+    customer_id = await _customer_of(session, lines["a"])
+    update = callback_update(f"gdue:{customer_id}", GROUP)
+
+    await group_menu.on_callback(update, SimpleNamespace(user_data={}))
+
+    body = update.callback_query.edits[-1]
+    assert "Scadenze · Cliente a" in body
+    assert "oggi" in body
+    assert "scade il" not in body.split("\n")[-1], "la data non si ripete due volte"
+    assert _callbacks(update.callback_query.markup)[0] == f"gcard:{customer_id}"
+
+
+async def test_codes_of_another_reseller_is_refused(session, bot_session_factory) -> None:
+    lines = await _three_sources(session)
+    customer_id = await _customer_of(session, lines["b"])
+    update = callback_update(f"gcod:{customer_id}", GROUP)
+
+    await group_menu.on_callback(update, SimpleNamespace(user_data={}))
+
+    assert "non disponibile in questo gruppo" in update.callback_query.edits[-1]
 
 
 async def test_card_refuses_a_customer_of_another_reseller(session, bot_session_factory) -> None:

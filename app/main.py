@@ -133,7 +133,7 @@ def build_application() -> Application:
         CallbackQueryHandler(reseller.on_callback, pattern=r"^(rq|rqm|rqa|rqr|auth):")
     )
     application.add_handler(
-        CallbackQueryHandler(group_menu.on_callback, pattern=r"^(gmenu|gcard|grenew):")
+        CallbackQueryHandler(group_menu.on_callback, pattern=r"^(gmenu|gcard|gdue|gcod|grenew):")
     )
     application.add_handler(CallbackQueryHandler(group_request.ask, pattern=r"^greq:"))
     application.add_handler(CallbackQueryHandler(group_request.pick_months, pattern=r"^greqm:"))
