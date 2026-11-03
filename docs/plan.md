@@ -13,7 +13,9 @@ Fasi **A/P/S** (infrastruttura, discovery, sync pannelli), **B** (clienti,
 linee, prezzi, rinnovi, incassi), **C** (rivenditori e richieste) e **D**
 (reminder e backup) sono implementate, testate e **in produzione** su
 `bitch-0` come `@l7_manager_bot`. Il backfill commerciale è applicato.
-Restano rifiniture di interfaccia (vedi “Cosa manca”). La VPS è censita in
+Le rifiniture di interfaccia (modifica anagrafica, scheda cliente, wizard
+completo, impostazioni modificabili, “non rinnova”) sono in produzione dal
+2026-11-03. Resta la sola Fase F, rinviata di proposito (vedi “Cosa manca”). La VPS è censita in
 `vps-infrastructure` come `HETZNER-personal-1` e le tre repo di lavoro sono
 allineate ai rispettivi remoti.
 
@@ -27,6 +29,7 @@ allineate ai rispettivi remoti.
 | Bot | `@l7_manager_bot`, polling, nessuna porta pubblica |
 | DB | `/data/8manager.sqlite3` (SQLite WAL), backup in `/data/backups` |
 | Job | heartbeat 60 s · reminder 09:00 · backup 03:15 (Europe/Rome) |
+| Ultimo deploy | `1a56998` · 2026-11-03T00:09Z · schema `4d2c9a1b7e38` · 216 test · CI verde |
 
 ```bash
 ./scripts/deploy.sh            # dry-run
