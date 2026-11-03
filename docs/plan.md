@@ -129,7 +129,8 @@ Bot (owner):
   (scadenze, rinnovo, cerca cliente, aiuto) al posto dei comandi testuali; ogni
   risultato di ricerca ha «Scadenza», «Codici» e «Rinnovo», sempre del solo
   rivenditore collegato alla chat; i risultati sono paginati 8 per pagina con
-  ◀️ ▶️.
+  ◀️ ▶️. L'owner riceve l'avviso con «Approva»/«Rifiuta» e ha `/richieste` per
+  l'elenco (il comando era definito ma non registrato: ora risponde).
 - **Rivenditore da bot**: dalla scheda cliente «🏷 Rivenditore» sposta tutte le
   linee attive su un rivenditore o le riporta a «Diretto», con audit per linea;
   la stessa voce è nel menu **Modifica** della singola linea. Il campo vive sulla

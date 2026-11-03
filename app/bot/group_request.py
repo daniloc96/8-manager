@@ -264,9 +264,20 @@ async def _notify_owner(
                 f"🔔 <b>Nuova richiesta dal gruppo</b>\n\n"
                 f"{ui.esc(title)}\n{months} {_period(months)} · #{request_id}\n"
                 f"da {ui.esc(who)} ({ui.esc(chat_title or 'gruppo')})\n\n"
-                "Rispondi con <code>/richieste</code>."
+                "Approva da qui o apri <code>/richieste</code>."
             ),
             parse_mode=ParseMode.HTML,
+            reply_markup=InlineKeyboardMarkup(
+                [
+                    [
+                        InlineKeyboardButton(
+                            f"✅ Approva {months} {_period(months)}",
+                            callback_data=f"rqa:{request_id}:{months}",
+                        )
+                    ],
+                    [InlineKeyboardButton("✖️ Rifiuta", callback_data=f"rqr:{request_id}")],
+                ]
+            ),
         )
     except Exception:
         logger.warning("Richiesta %s: avviso all'owner non riuscito", request_id)

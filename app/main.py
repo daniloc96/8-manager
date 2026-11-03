@@ -47,6 +47,7 @@ COMMANDS = [
     BotCommand("incassi", "Rinnovi del mese"),
     BotCommand("nuovo", "Nuovo cliente"),
     BotCommand("richiedi", "Richiedi un rinnovo (rivenditori)"),
+    BotCommand("richieste", "Richieste in attesa (owner)"),
     BotCommand("collega", "Collega questo gruppo a un rivenditore"),
     BotCommand("stato", "Stato del bot e del database"),
     BotCommand("sync", "Sincronizza le linee dai pannelli"),
@@ -111,6 +112,7 @@ def build_application() -> Application:
     application.add_handler(CommandHandler("incassi", menu.show_income))
     application.add_handler(CommandHandler("nuovo", newline.start))
     application.add_handler(CommandHandler("richiedi", richiedi))
+    application.add_handler(CommandHandler("richieste", reseller.pending_for_owner))
     application.add_handler(CommandHandler("collega", reseller.collega))
     application.add_handler(CommandHandler("scollega", reseller.scollega))
     application.add_handler(CommandHandler("id", common.show_id))

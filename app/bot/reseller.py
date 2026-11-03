@@ -29,6 +29,10 @@ def _today():
     return datetime.now(ZoneInfo(get_settings().tz)).date()
 
 
+def _period(months: int) -> str:
+    return "mese" if months == 1 else "mesi"
+
+
 def _presets() -> tuple[int, ...]:
     return get_settings().duration_presets_list
 
@@ -179,7 +183,7 @@ async def _submit(update, context, line_id: int, months: int, *, editing) -> Non
     context.user_data.pop("awaiting", None)
     await editing.edit_text(
         f"✅ <b>Richiesta inviata</b>\n\n{ui.esc(title)}\n"
-        f"{months} mesi · scade {ui.italian_date(expires)}\n"
+        f"{months} {_period(months)} · scade {ui.italian_date(expires)}\n"
         "Ti avviso appena l'owner risponde.",
         parse_mode=ParseMode.HTML,
         reply_markup=InlineKeyboardMarkup(
@@ -202,7 +206,7 @@ async def _submit(update, context, line_id: int, months: int, *, editing) -> Non
                 text=(
                     "🔔 <b>Richiesta di rinnovo</b>\n\n"
                     f"{ui.esc(access.name)} · {ui.esc(title)}\n"
-                    f"Scade {ui.italian_date(expires)} · richiesti {months} mesi\n"
+                    f"Scade {ui.italian_date(expires)} · richiesti {months} {_period(months)}\n"
                     f"Prezzo {format_eur(price)}/mese · totale {format_eur(total)}"
                 ),
                 parse_mode=ParseMode.HTML,
@@ -248,14 +252,14 @@ async def approve(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     await query.answer("Rinnovo registrato")
     await query.edit_message_text(
         f"✅ <b>Rinnovo approvato</b>\n\n{ui.esc(title)}\n"
-        f"{months} mesi · nuova scadenza {ui.italian_date(expires)}",
+        f"{months} {_period(months)} · nuova scadenza {ui.italian_date(expires)}",
         parse_mode=ParseMode.HTML,
     )
 
     if context.bot is not None:
         text = (
             "✅ <b>Rinnovo confermato</b>\n\n"
-            f"{ui.esc(title)}\n{months} mesi · scade {ui.italian_date(expires)}"
+            f"{ui.esc(title)}\n{months} {_period(months)} · scade {ui.italian_date(expires)}"
         )
         try:
             await context.bot.send_message(chat_id=requester, text=text, parse_mode=ParseMode.HTML)
@@ -366,18 +370,40 @@ async def pending_for_owner(update: Update, context: ContextTypes.DEFAULT_TYPE) 
             return
         requests = await pending_requests(session)
         rows = []
+        buttons = []
         for request in requests:
             line = await get_line(session, request.line_id)
             if line is None:
                 continue
             rows.append(
                 f"• #{request.id} {ui.esc(ui.line_title(line))} — "
-                f"{request.months} mesi da {request.requested_by_telegram_id}"
+                f"{request.months} {'mese' if request.months == 1 else 'mesi'} "
+                f"da {request.requested_by_telegram_id}"
+            )
+            period = "mese" if request.months == 1 else "mesi"
+            buttons.append(
+                [
+                    InlineKeyboardButton(
+                        f"✅ Approva · {ui.line_title(line)[:30]} · {request.months} {period}",
+                        callback_data=f"rqa:{request.id}:{request.months}",
+                    )
+                ]
+            )
+            buttons.append(
+                [
+                    InlineKeyboardButton(
+                        "✖️ Rifiuta",
+                        callback_data=f"rqr:{request.id}",
+                    )
+                ]
             )
 
     body = ["🔔 <b>Richieste in attesa</b>", ""]
     body.extend(rows or ["Nessuna richiesta in attesa."])
-    await message.reply_html("\n".join(body))
+    await message.reply_html(
+        "\n".join(body),
+        reply_markup=InlineKeyboardMarkup(buttons) if buttons else None,
+    )
 
 
 async def on_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:

@@ -201,7 +201,8 @@ async def _apply_renewal(
         body = (
             f"✅ <b>Rinnovo registrato</b>\n\n"
             f"{ui.esc(ui.line_title(line))}\n"
-            f"{months} mesi · {format_eur(renewal.total_cents)}\n"
+            f"{months} {'mese' if months == 1 else 'mesi'} · "
+            f"{format_eur(renewal.total_cents)}\n"
             f"Nuova scadenza: <b>{ui.italian_date(line.expires_on)}</b>"
         )
         markup = ui.undo_keyboard(renewal.id, line.id)
