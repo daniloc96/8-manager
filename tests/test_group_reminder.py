@@ -79,7 +79,7 @@ async def _line(session, reseller_id: int | None, *, expires: date, name: str) -
 async def test_group_message_lists_only_its_reseller_and_window(session, engine) -> None:
     luca = await _reseller(session, "Luca", group_id=-100999)
     anna = await _reseller(session, "Anna", group_id=-100888)
-    await _line(session, luca.id, expires=date(2026, 11, 4), name="Mario Rossi")
+    in_window = await _line(session, luca.id, expires=date(2026, 11, 4), name="Mario Rossi")
     await _line(session, luca.id, expires=date(2026, 12, 20), name="Fuori Finestra")
     await _line(session, anna.id, expires=date(2026, 11, 3), name="Altro Rivenditore")
     await _line(session, None, expires=date(2026, 11, 3), name="Diretto")
@@ -95,7 +95,9 @@ async def test_group_message_lists_only_its_reseller_and_window(session, engine)
     assert "Fuori Finestra" not in body
     assert "Diretto" not in body  # le linee dirette non sono del rivenditore
     assert "prossimi 3 giorni" in body
-    assert markup is None, "in gruppo niente pulsanti da owner"
+    # Un pulsante «Richiedi» per ogni linea in finestra, e solo per quelle.
+    callbacks = [b.callback_data for row in markup.inline_keyboard for b in row]
+    assert callbacks == [f"greq:{in_window.id}"]
 
 
 async def test_group_message_says_when_each_line_expires(session, engine) -> None:

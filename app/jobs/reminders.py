@@ -174,7 +174,7 @@ async def build_group_reminder(
     warn_days = settings.reminder_days
     session_factory = factory or get_session_factory()
 
-    rows: list[tuple[int, str, date]] = []
+    rows: list[tuple[int, int, str, date]] = []
     candidates = 0
     async with session_factory() as session:
         muted = await muted_line_ids(session, today)
@@ -203,7 +203,7 @@ async def build_group_reminder(
                 today=today,
             ):
                 continue
-            rows.append((delta, ui.line_title(line), line.expires_on))
+            rows.append((line.id, delta, ui.line_title(line), line.expires_on))
         await session.commit()
 
     if not rows and candidates:
@@ -221,13 +221,27 @@ async def build_group_reminder(
         body.append("<i>Nessuna scadenza nei prossimi " + str(warn_days) + " giorni.</i>")
         return "\n".join(body), None
 
-    for delta, title, expires in sorted(rows):
+    for _line_id, delta, title, expires in sorted(rows, key=lambda row: row[1]):
         when = (
             "scade oggi" if delta == 0 else "scade domani" if delta == 1 else f"tra {delta} giorni"
         )
         body.append(f"• {ui.esc(title)} — {when} ({ui.italian_date(expires)})")
-    body.extend(["", "<i>Per chiedere un rinnovo: /richiedi</i>"])
-    return "\n".join(body), None
+    body.extend(["", "<i>Premi «Richiedi» sulla linea: ti chiedo conferma prima di inviare.</i>"])
+    buttons = [
+        [
+            InlineKeyboardButton(
+                f"🔁 Richiedi · {_short_title(title)}",
+                callback_data=f"greq:{line_id}",
+            )
+        ]
+        for line_id, _delta, title, _expires in sorted(rows)
+    ]
+    return "\n".join(body), InlineKeyboardMarkup(buttons)
+
+
+def _short_title(title: str, limit: int = 26) -> str:
+    """Telegram vuole etichette corte: il nome per esteso sta nel testo."""
+    return title if len(title) <= limit else title[: limit - 1].rstrip() + "…"
 
 
 async def build_owner_reminder(

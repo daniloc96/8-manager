@@ -90,6 +90,9 @@ def test_every_callback_matches_exactly_one_handler(monkeypatch) -> None:
         "codes:5",
         "custres:5",
         "custres:5:2",
+        "greq:12",
+        "greqy:12",
+        "greqn:12",
     ]
     for data in samples:
         matches = [pattern for pattern in patterns if pattern.match(data)]
