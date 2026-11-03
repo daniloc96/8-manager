@@ -128,7 +128,7 @@ async def confirm(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         return
 
     await query.answer()
-    await _submit(update, context, int(raw_id), int(raw_months), editing=query)
+    await _submit(update, context, int(raw_id), int(raw_months), editing=ui.Editor(query))
 
 
 async def submit_from_text(
@@ -137,7 +137,7 @@ async def submit_from_text(
     message = update.effective_message
     if message is None:
         return True
-    await _submit(update, context, line_id, months, editing=_MessageEditor(message))
+    await _submit(update, context, line_id, months, editing=ui.Editor(message))
     return True
 
 
@@ -411,15 +411,6 @@ async def handle_request_text(update, context, pending: str) -> bool:
         return True
     await submit_from_text(update, context, int(raw_id), int(text))
     return True
-
-
-class _MessageEditor:
-    def __init__(self, message) -> None:
-        self._message = message
-
-    async def edit_text(self, text, **kwargs):
-        kwargs.pop("parse_mode", None)
-        return await self._message.reply_html(text, **kwargs)
 
 
 async def collega(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:

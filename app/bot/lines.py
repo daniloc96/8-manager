@@ -140,7 +140,7 @@ async def renew(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         return
 
     await query.answer()
-    await _apply_renewal(update, context, line_id, int(raw_months), editing=query)
+    await _apply_renewal(update, context, line_id, int(raw_months), editing=ui.Editor(query))
 
 
 async def _apply_renewal(
@@ -381,22 +381,11 @@ async def handle_pending_text(update: Update, context: ContextTypes.DEFAULT_TYPE
             context,
             int(raw_id),
             int(text),
-            editing=_MessageEditor(message),
+            editing=ui.Editor(message),
         )
         return True
 
     return False
-
-
-class _MessageEditor:
-    """Piccolo adattatore: il flusso del rinnovo scrive con edit_text."""
-
-    def __init__(self, message) -> None:
-        self._message = message
-
-    async def edit_text(self, text, **kwargs):
-        kwargs.pop("parse_mode", None)
-        return await self._message.reply_html(text, **kwargs)
 
 
 async def on_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:

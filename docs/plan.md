@@ -175,6 +175,15 @@ dominio, non cliente.
 
 ## Corretto il 2026-11-03
 
+- **Richiesta dal canale e rinnovo da bottone: `AttributeError: 'CallbackQuery'
+  object has no attribute 'edit_text'`**. `CallbackQuery` espone
+  `edit_message_text`, `Message` espone `reply_html`: il codice passava un
+  `CallbackQuery` dove si aspettava un editor con `edit_text`. Era rotto sia il
+  rinnovo da bottone sia la richiesta di rinnovo del rivenditore (il gruppo
+  veniva avvisato, la conferma no). Ora c'è `ui.Editor`, che sceglie il metodo
+  giusto dal tipo di target; `_MessageEditor` duplicate sono state rimosse. Due
+  test nuovi usano finti oggetti con la firma vera di PTB e, sul codice
+  precedente, falliscono con l'errore di produzione.
 - **`/collega` e `/richiedi` sollevavano `TypeError`**: `Message.reply_html` di
   PTB imposta il parse mode da sé e non lo accetta come parametro. Il comando
   falliva a fine lavoro (gruppo collegato, poi eccezione); `/impostazioni` da
@@ -210,7 +219,7 @@ Debito tecnico noto:
 ```bash
 uv sync                                  # dipendenze
 uv run ruff check . && uv run ruff format --check .
-uv run pytest -q                         # 245 test al 2026-11-03
+uv run pytest -q                         # 249 test al 2026-11-03
 ./scripts/deploy.sh --apply              # produzione
 ./scripts/verify.sh
 ```

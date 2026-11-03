@@ -22,6 +22,26 @@ PLATFORM_SHORT = {
 }
 
 
+class Editor:
+    """Scrive in un messaggio, sia da bottone sia da testo.
+
+    `Message` e `CallbackQuery` non hanno lo stesso metodo: il primo
+    `reply_html`, il secondo `edit_message_text`. I flussi che possono partire
+    da entrambi (rinnovo, richiesta rivenditore) passano di qui e non devono
+    sapere da dove arrivano.
+    """
+
+    def __init__(self, target) -> None:
+        self._target = target
+
+    async def edit_text(self, text, **kwargs):
+        if hasattr(self._target, "edit_message_text"):
+            return await self._target.edit_message_text(text, **kwargs)
+        # `reply_html` imposta parse_mode da sé e non lo accetta.
+        kwargs.pop("parse_mode", None)
+        return await self._target.reply_html(text, **kwargs)
+
+
 def html_target(message):
     """Callable che scrive in HTML accettando anche `parse_mode`.
 
