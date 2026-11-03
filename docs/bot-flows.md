@@ -290,3 +290,27 @@ Ogni giorno alle 09:00 Europe/Rome:
 - rivenditore: solo le sue linee;
 - nessun messaggio se non c'è nulla;
 - deduplica per (tipo, linea, chat, giorno).
+
+### Anomalie del sync
+
+Il `/sync` dice quante righe hanno qualcosa che non torna, ma non permette di
+sistemarle. Le anomalie **con una linea** vengono salvate al termine del sync e
+l'owner le gestisce una alla volta in privato.
+
+```
+/anomalie                 # elenco delle linee con un'anomalia aperta
+/anomalia mario           # cerca la linea e apre la sua scheda
+```
+
+Nella scheda della linea compare `⚠️ Anomalia sync` quando c'è qualcosa da
+sistemare, con le due date a confronto e due scelte:
+
+- **🗓 Allinea alla data del pannello** — il pannello è la fonte di verità: la
+  scadenza locale diventa quella del pannello e l'anomalia si chiude.
+- **📌 Tieni la data locale** — il locale è più avanti perché il rinnovo sul
+  pannello non è ancora stato fatto. L'anomalia viene accettata e non torna
+  finché non scade la data locale: a quel punto, se il pannello non è stato
+  rinnovato, ricompare.
+
+Le anomalie senza linea (per esempio un username doppio nel pannello) restano
+solo nel messaggio del sync: non c'è una linea su cui agire dal bot.

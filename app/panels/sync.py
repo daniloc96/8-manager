@@ -4,6 +4,7 @@ import logging
 from collections.abc import Sequence
 from dataclasses import dataclass, field
 from datetime import date, datetime
+from enum import StrEnum
 from zoneinfo import ZoneInfo
 
 from sqlalchemy import select
@@ -35,11 +36,22 @@ LUCKY_PLATFORMS = (Platform.LIVE_HALLO, Platform.VOD_NEWVOD)
 IMPORT_NOTE = "Importato dal pannello: prezzo da impostare"
 
 
+class SyncIssue(StrEnum):
+    """Anomalie che l'owner può gestire da solo, senza toccare i pannelli."""
+
+    EXPIRY_DIFF = "expiry_diff"  # data locale più avanti di quella del pannello
+    LOCAL_AHEAD = "local_ahead"
+
+
 @dataclass(slots=True)
 class ReviewItem:
     platform: Platform
     username: str
     reason: str
+    line_id: int | None = None
+    issue: str | None = None
+    local_expires: date | None = None
+    panel_expires: date | None = None
 
 
 @dataclass(slots=True)
@@ -598,11 +610,18 @@ async def _reconcile_expiries(
                     "salto di scadenza non a mesi interi: rinnovo da registrare a mano",
                 )
         elif effective < previous:
+            warning = (
+                f"data locale {previous:%d/%m/%Y} più avanti del pannello ({effective:%d/%m/%Y})"
+            )
             _add_review(
                 result,
                 primary,
                 username,
-                "scadenza pannello precedente a quella locale",
+                warning,
+                line_id=line.id,
+                issue=SyncIssue.LOCAL_AHEAD.value,
+                local_expires=previous,
+                panel_expires=effective,
             )
 
 
@@ -864,8 +883,28 @@ def _notes_state(left: str | None, right: str | None) -> tuple[bool, str | None]
     return False, "note diverse tra Live e VOD"
 
 
-def _add_review(result: LinkResult, platform: Platform, username: str, reason: str) -> None:
-    result.reviews.append(ReviewItem(platform=platform, username=username, reason=reason))
+def _add_review(
+    result: LinkResult,
+    platform: Platform,
+    username: str,
+    reason: str,
+    *,
+    line_id: int | None = None,
+    issue: str | None = None,
+    local_expires: date | None = None,
+    panel_expires: date | None = None,
+) -> None:
+    result.reviews.append(
+        ReviewItem(
+            platform=platform,
+            username=username,
+            reason=reason,
+            line_id=line_id,
+            issue=issue,
+            local_expires=local_expires,
+            panel_expires=panel_expires,
+        )
+    )
 
 
 async def _apply_exceptions(

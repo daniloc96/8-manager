@@ -9,9 +9,11 @@ from telegram.ext import ContextTypes
 
 from app.bot import texts
 from app.bot.auth import is_owner
+from app.db import session_scope
 from app.panels.factory import build_adapters
 from app.panels.report import report_html
 from app.panels.sync import run_sync
+from app.services.reviews import store_reviews
 
 logger = logging.getLogger(__name__)
 
@@ -48,6 +50,8 @@ async def sync_panels(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
     )
 
     report = await run_sync(adapters, import_missing=import_missing, skipped=skipped)
+    async with session_scope() as session:
+        await store_reviews(session, report)
     body = report_html(report)
     try:
         await notice.edit_text(body, parse_mode=ParseMode.HTML)

@@ -16,6 +16,7 @@ from app.models import AuditLog, Platform, RenewalSource
 from app.services.lines import renew_line
 from app.services.months import MAX_MONTHS, MIN_MONTHS
 from app.services.queries import get_line, panel_for
+from app.services.reviews import describe, open_issue
 from app.services.text import format_eur, parse_price_to_cents
 
 logger = logging.getLogger(__name__)
@@ -55,18 +56,27 @@ async def send_card(
         if line is None:
             body = "Linea non trovata o disattivata."
             markup = _back()
+            issue = None
         elif access.is_reseller and line.reseller_id != access.reseller_id:
             body = "Linea non disponibile."
             markup = _back()
+            issue = None
         elif not access.allowed:
             body = "Non sei autorizzato."
             markup = _back()
+            issue = None
         else:
+            issue = await open_issue(session, line_id=line.id) if access.is_owner else None
             body = ui.line_card(line, _today())
+            if issue is not None:
+                body = f"{body}\n⚠️ <i>{ui.esc(describe(issue))}</i>"
             if note:
                 body = f"{note}\n\n{body}"
             markup = ui.line_keyboard(
-                line, is_owner=access.is_owner, is_reseller=access.is_reseller
+                line,
+                is_owner=access.is_owner,
+                is_reseller=access.is_reseller,
+                has_issue=issue is not None,
             )
 
     if query is not None:

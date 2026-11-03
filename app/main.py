@@ -28,6 +28,7 @@ from app.bot import (
     newline,
     panels,
     reseller,
+    reviews,
     search,
     settings_bot,
 )
@@ -51,6 +52,8 @@ COMMANDS = [
     BotCommand("collega", "Collega questo gruppo a un rivenditore"),
     BotCommand("stato", "Stato del bot e del database"),
     BotCommand("sync", "Sincronizza le linee dai pannelli"),
+    BotCommand("anomalie", "Anomalie del sync da sistemare (owner)"),
+    BotCommand("anomalia", "Gestisci l'anomalia di una linea (owner)"),
     BotCommand("id", "Mostra ID utente e chat"),
     BotCommand("help", "Comandi disponibili"),
 ]
@@ -118,6 +121,8 @@ def build_application() -> Application:
     application.add_handler(CommandHandler("id", common.show_id))
     application.add_handler(CommandHandler("stato", common.status))
     application.add_handler(CommandHandler("sync", panels.sync_panels))
+    application.add_handler(CommandHandler("anomalie", reviews.list_anomalies))
+    application.add_handler(CommandHandler("anomalia", reviews.find))
     application.add_handler(CommandHandler("help", common.help_command))
     application.add_handler(CallbackQueryHandler(menu.on_callback, pattern=r"^menu:"))
     application.add_handler(
@@ -129,6 +134,7 @@ def build_application() -> Application:
         CallbackQueryHandler(customer.on_reseller_callback, pattern=r"^custres:")
     )
     application.add_handler(CallbackQueryHandler(codes.on_callback, pattern=r"^codes:"))
+    application.add_handler(CallbackQueryHandler(reviews.on_callback, pattern=r"^rv:"))
     application.add_handler(CallbackQueryHandler(settings_bot.on_callback, pattern=r"^set:"))
     application.add_handler(CallbackQueryHandler(flagged.on_callback, pattern=r"^nr:"))
     application.add_handler(

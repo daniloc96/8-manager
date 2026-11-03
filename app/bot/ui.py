@@ -146,7 +146,13 @@ def menu_keyboard(*, is_owner: bool, is_reseller: bool = False) -> InlineKeyboar
     return InlineKeyboardMarkup(rows)
 
 
-def line_keyboard(line: Line, *, is_owner: bool, is_reseller: bool = False) -> InlineKeyboardMarkup:
+def line_keyboard(
+    line: Line,
+    *,
+    is_owner: bool,
+    is_reseller: bool = False,
+    has_issue: bool = False,
+) -> InlineKeyboardMarkup:
     rows: list[list[InlineKeyboardButton]] = []
     if is_owner:
         rows.append(
@@ -157,6 +163,8 @@ def line_keyboard(line: Line, *, is_owner: bool, is_reseller: bool = False) -> I
         )
         rows.append([InlineKeyboardButton("✏️ Modifica", callback_data=f"edit:{line.id}")])
         rows.append([InlineKeyboardButton("🔑 Codici", callback_data=f"codes:{line.customer_id}")])
+        if has_issue:
+            rows.append([InlineKeyboardButton("⚠️ Anomalia sync", callback_data=f"rv:{line.id}")])
         # La marcatura si mette e si toglie anche qui: il reminder da solo non
         # basta per una linea lontana dalla scadenza.
         if getattr(line, "no_renewal", False):

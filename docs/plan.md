@@ -1,6 +1,6 @@
 # Piano di lavoro — 8-manager
 
-Ultimo aggiornamento: **2026-11-02 (notte)**.
+Ultimo aggiornamento: **2026-11-03**.
 Questo file è il punto di partenza per chi riprende il lavoro: stato reale,
 decisioni già prese, cosa manca e come si mette in produzione una modifica.
 
@@ -183,6 +183,17 @@ Nota sulla modifica anagrafica: il **link VOD** non è un campo salvato, si
 genera da `vod_domain` + username e password della linea (vedi
 `docs/panels-api.md`). Per questo non compare nel menu **Modifica**: cambia
 dominio, non cliente.
+
+## Aggiunto il 2026-11-03
+
+- **Anomalie del sync gestibili una alla volta** (owner, in privato). Il `/sync`
+  riportava quali righe avevano qualcosa che non torna ma non si poteva fare
+  niente: ora il sync salva le review che hanno una linea, `/anomalie` le elenca
+  e `/anomalia <nome>` apre quella della linea. Dalla scheda (o dal messaggio
+  del cliente) l'owner sceglie «Allinea alla data del pannello» — il pannello è
+  la fonte di verità — oppure «Tieni la data locale», che accetta lo scarto
+  fino alla data locale. Caso coperto per primo: **data locale più avanti di
+  quella del pannello**. Migrazione `a7c53d9e21b4`.
 
 ## Corretto il 2026-11-03
 

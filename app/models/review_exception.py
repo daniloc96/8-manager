@@ -30,5 +30,13 @@ class ReviewException(TimestampMixin, Base):
     )
     reason: Mapped[str] = mapped_column(String(200), nullable=False)
     review_on: Mapped[date | None] = mapped_column(Date)
+    # Cosa è stato accettato: "expiry_diff" = il locale era più avanti del
+    # pannello e si è scelto di allinearlo (o di tenere il locale). Con
+    # `local_expires` valorizzato il sync sa che a quella data il locale è
+    # stato voluto, quindi non riapre l'anomalia finché il pannello non
+    # sorpassa il locale.
+    issue: Mapped[str | None] = mapped_column(String(40))
+    local_expires: Mapped[date | None] = mapped_column(Date)
+    panel_expires: Mapped[date | None] = mapped_column(Date)
 
     line: Mapped[Line] = relationship(back_populates="review_exception")

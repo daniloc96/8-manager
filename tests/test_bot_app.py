@@ -26,6 +26,9 @@ def test_build_application_registers_handlers(monkeypatch) -> None:
             "id",
             "help",
             "nuovo",
+            "richieste",
+            "anomalie",
+            "anomalia",
         } <= commands
         assert len(handlers) >= 10
     finally:
@@ -103,6 +106,9 @@ def test_every_callback_matches_exactly_one_handler(monkeypatch) -> None:
         "greqm:12:3",
         "greqy:12:3",
         "greqn:12",
+        "rv:12",
+        "rv:12:align",
+        "rv:12:accept",
     ]
     for data in samples:
         matches = [pattern for pattern in patterns if pattern.match(data)]
