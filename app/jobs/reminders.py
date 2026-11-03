@@ -20,6 +20,9 @@ from app.services.review_exceptions import is_due
 logger = logging.getLogger(__name__)
 
 KIND_EXPIRING = "expiring"
+# Riepilogo del gruppo: invii distinti da quelli in privato, così un doppio
+# avvio del job non manda due volte lo stesso messaggio.
+KIND_GROUP_EXPIRING = "group_expiring"
 KIND_EXPIRED = "expired"
 KIND_EXCEPTION = "exception"
 
@@ -154,6 +157,69 @@ async def build_reminder(
     return "\n".join(body), InlineKeyboardMarkup(buttons)
 
 
+async def build_group_reminder(
+    today: date,
+    *,
+    reseller_id: int,
+    chat_id: int,
+    factory=None,
+) -> tuple[str, InlineKeyboardMarkup | None] | None:
+    """Scadenze dei prossimi giorni per il gruppo di un rivenditore.
+
+    Solo le linee di quel rivenditore, con la finestra di `reminder_days`
+    (oggi compreso). Nessun pulsante: in un gruppo i comandi dell'owner non
+    hanno senso. Se non c'è nulla da dire non si invia niente.
+    """
+    settings = get_settings()
+    warn_days = settings.reminder_days
+    session_factory = factory or get_session_factory()
+
+    rows: list[tuple[int, str, date]] = []
+    async with session_factory() as session:
+        muted = await muted_line_ids(session, today)
+        lines = list(
+            (
+                await session.scalars(
+                    select(Line).where(
+                        Line.deleted_at.is_(None),
+                        Line.reseller_id == reseller_id,
+                    )
+                )
+            ).all()
+        )
+        for line in lines:
+            if line.id in muted:
+                continue
+            delta = days_left(line.expires_on, today)
+            if delta < 0 or delta > warn_days:
+                continue
+            if not await _claim(
+                session,
+                kind=KIND_GROUP_EXPIRING,
+                line_id=line.id,
+                chat_id=chat_id,
+                today=today,
+            ):
+                continue
+            rows.append((delta, ui.line_title(line), line.expires_on))
+        await session.commit()
+
+    if not rows:
+        return None
+
+    body = [
+        f"⏰ <b>Scadenze</b> · prossimi {warn_days} giorni",
+        "",
+    ]
+    for delta, title, expires in sorted(rows):
+        when = (
+            "scade oggi" if delta == 0 else "scade domani" if delta == 1 else f"tra {delta} giorni"
+        )
+        body.append(f"• {ui.esc(title)} — {when} ({ui.italian_date(expires)})")
+    body.extend(["", "<i>Per chiedere un rinnovo: /richiedi</i>"])
+    return "\n".join(body), None
+
+
 async def build_owner_reminder(
     today: date, *, factory=None
 ) -> tuple[str, InlineKeyboardMarkup] | None:
@@ -198,6 +264,17 @@ async def reminder_job(context: ContextTypes.DEFAULT_TYPE) -> None:
     else:
         await _send(context, settings.owner_telegram_id, owner_payload)
 
+    # Gruppi collegati: riepilogo autonomo, con le sole linee del rivenditore.
+    for reseller_id, group_id in await _notifying_groups():
+        try:
+            group_payload = await build_group_reminder(
+                today, reseller_id=reseller_id, chat_id=group_id
+            )
+        except Exception:
+            logger.exception("Reminder: costruzione per il gruppo %s fallita", group_id)
+            continue
+        await _send(context, group_id, group_payload)
+
     resellers = await _notifying_resellers()
     for reseller_id, chat_id in resellers:
         try:
@@ -211,6 +288,25 @@ async def reminder_job(context: ContextTypes.DEFAULT_TYPE) -> None:
             logger.exception("Reminder: costruzione per il rivenditore %s fallita", chat_id)
             continue
         await _send(context, chat_id, payload)
+
+
+async def _notifying_groups() -> list[tuple[int, int]]:
+    """Gruppi Telegram collegati a un rivenditore attivo con le notifiche on."""
+    from app.db import get_session_factory
+    from app.models import Reseller
+
+    factory = get_session_factory()
+    async with factory() as session:
+        records = (
+            await session.scalars(
+                select(Reseller).where(
+                    Reseller.active.is_(True),
+                    Reseller.notify.is_(True),
+                    Reseller.group_chat_id.is_not(None),
+                )
+            )
+        ).all()
+    return [(reseller.id, int(reseller.group_chat_id)) for reseller in records]
 
 
 async def _notifying_resellers() -> list[tuple[int, int]]:

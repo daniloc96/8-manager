@@ -120,6 +120,10 @@ Bot (owner):
 - **impostazioni modificabili**: `vod_domain` si cambia dal bot con
   validazione (schema `http`/`https`, niente percorso né parametri). `-`
   riporta la chiave al default di `.env`; un valore vuoto viene rifiutato;
+- **Riepilogo nel gruppo**: ogni gruppo collegato a un rivenditore riceve alle
+  09:00 le scadenze dei prossimi `reminder_days` giorni (3), solo per le linee di
+  quel rivenditore, senza pulsanti; niente messaggio se la lista è vuota e
+  nessun doppione nello stesso giorno (claim per chat e linea).
 - **Rivenditore da bot**: dalla scheda cliente «🏷 Rivenditore» sposta tutte le
   linee attive su un rivenditore o le riporta a «Diretto», con audit per linea;
   la stessa voce è nel menu **Modifica** della singola linea. Il campo vive sulla
@@ -219,7 +223,7 @@ Debito tecnico noto:
 ```bash
 uv sync                                  # dipendenze
 uv run ruff check . && uv run ruff format --check .
-uv run pytest -q                         # 249 test al 2026-11-03
+uv run pytest -q                         # 254 test al 2026-11-03
 ./scripts/deploy.sh --apply              # produzione
 ./scripts/verify.sh
 ```

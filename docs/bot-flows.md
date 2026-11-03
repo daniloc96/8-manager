@@ -155,6 +155,26 @@ La linea non resta «in attesa di conferma»: la data del bot è quella che cont
 finché un `/sync` non trova sul pannello una data diversa, e in quel caso vince
 quella del pannello.
 
+### Riepilogo nel gruppo del rivenditore
+
+Un gruppo collegato con `/collega <nome>` riceve ogni giorno alle 09:00 (stessa
+ora del reminder owner) un messaggio con le scadenze dei **prossimi 3 giorni**
+(`reminder_days`), solo per le linee di quel rivenditore:
+
+```
+⏰ Scadenze · prossimi 3 giorni
+
+• Mario Caterino · Linea 1 — scade domani (04/11/2026)
+• Luca Bianchi · Linea unica — tra 2 giorni (05/11/2026)
+
+Per chiedere un rinnovo: /richiedi
+```
+
+Niente pulsanti: in gruppo i comandi dell'owner non hanno senso. Se non c'è
+nulla in scadenza il messaggio non parte, e un secondo giro dello stesso giorno
+non ripete le stesse linee (le notifiche sono registrate per chat e giorno).
+Serve che il gruppo sia collegato e che il rivenditore abbia `notify` attivo.
+
 ### Nuova linea (bot-first)
 
 1. nome del cliente;
