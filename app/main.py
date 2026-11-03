@@ -132,6 +132,7 @@ def build_application() -> Application:
         CallbackQueryHandler(reseller.on_callback, pattern=r"^(rq|rqm|rqa|rqr|auth):")
     )
     application.add_handler(CallbackQueryHandler(group_request.ask, pattern=r"^greq:"))
+    application.add_handler(CallbackQueryHandler(group_request.pick_months, pattern=r"^greqm:"))
     application.add_handler(CallbackQueryHandler(group_request.confirm, pattern=r"^greqy:"))
     application.add_handler(CallbackQueryHandler(group_request.cancel, pattern=r"^greqn:"))
     application.add_handler(CallbackQueryHandler(newline.on_callback, pattern=r"^new:"))

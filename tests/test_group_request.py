@@ -116,7 +116,8 @@ async def _requests(factory) -> list[RenewalRequest]:
         return list((await check.scalars(select(RenewalRequest))).all())
 
 
-async def test_first_tap_asks_without_creating_anything(session, bot_session_factory) -> None:
+async def test_first_tap_asks_the_period(session, bot_session_factory) -> None:
+    """Il primo tap sceglie il periodo: non invia e non chiede ancora conferma."""
     _reseller, line = await _seed(session)
     context = SimpleNamespace(bot=FakeBot(), user_data={})
     update = callback_update(f"greq:{line.id}", chat=GROUP)
@@ -124,15 +125,52 @@ async def test_first_tap_asks_without_creating_anything(session, bot_session_fac
     await group_request.ask(update, context)
 
     text = update.callback_query.edits[-1]
-    assert "Sei sicuro di voler richiedere il rinnovo?" in text
+    assert "Quanti mesi vuoi richiedere?" in text
     assert "Mario Rossi" in text
     assert "scade 04/11/2026" in text
+    callbacks = _callbacks(update.callback_query.markup)
+    assert callbacks[: len(callbacks) - 1] == [
+        f"greqm:{line.id}:1",
+        f"greqm:{line.id}:2",
+        f"greqm:{line.id}:3",
+        f"greqm:{line.id}:5",
+        f"greqm:{line.id}:12",
+    ]
+    assert callbacks[-1] == f"greqn:{line.id}"
+    assert await _requests(bot_session_factory) == []
+    assert context.bot.sent == []
+
+
+async def test_period_tap_asks_confirmation(session, bot_session_factory) -> None:
+    _reseller, line = await _seed(session)
+    context = SimpleNamespace(bot=FakeBot(), user_data={})
+    update = callback_update(f"greqm:{line.id}:3", chat=GROUP)
+
+    await group_request.pick_months(update, context)
+
+    text = update.callback_query.edits[-1]
+    assert "Sei sicuro di voler richiedere il rinnovo?" in text
+    assert "3 mesi" in text
     assert _callbacks(update.callback_query.markup) == [
-        f"greqy:{line.id}",
+        f"greqy:{line.id}:3",
         f"greqn:{line.id}",
     ]
     assert await _requests(bot_session_factory) == []
     assert context.bot.sent == []
+
+
+async def test_period_out_of_range_is_refused(session, bot_session_factory) -> None:
+    _reseller, line = await _seed(session)
+    context = SimpleNamespace(bot=FakeBot(), user_data={})
+
+    pick = callback_update(f"greqm:{line.id}:99", chat=GROUP)
+    await group_request.pick_months(pick, context)
+    confirm = callback_update(f"greqy:{line.id}:99", chat=GROUP)
+    await group_request.confirm(confirm, context)
+
+    assert "deve stare tra" in pick.callback_query.edits[-1]
+    assert "deve stare tra" in confirm.callback_query.edits[-1]
+    assert await _requests(bot_session_factory) == []
 
 
 async def test_second_tap_creates_the_request_and_tells_the_owner(
@@ -140,7 +178,7 @@ async def test_second_tap_creates_the_request_and_tells_the_owner(
 ) -> None:
     _reseller, line = await _seed(session)
     context = SimpleNamespace(bot=FakeBot(), user_data={})
-    update = callback_update(f"greqy:{line.id}", chat=GROUP)
+    update = callback_update(f"greqy:{line.id}:3", chat=GROUP)
 
     await group_request.confirm(update, context)
 
@@ -149,7 +187,7 @@ async def test_second_tap_creates_the_request_and_tells_the_owner(
     assert len(requests) == 1
     request = requests[0]
     assert request.line_id == line.id
-    assert request.months == group_request.default_months()
+    assert request.months == 3
     assert request.requested_by_telegram_id == PRESSER
     assert request.origin_chat_id == GROUP_ID
     assert request.origin_message_id == 555
@@ -159,7 +197,7 @@ async def test_second_tap_creates_the_request_and_tells_the_owner(
     assert owner_messages, "l'owner deve saperlo subito"
     assert "Nuova richiesta dal gruppo" in owner_messages[0]
     assert "Anna Bianchi" in owner_messages[0]
-    assert "1 mese" in owner_messages[0] and "1 mesi" not in owner_messages[0]
+    assert "3 mesi" in owner_messages[0]
 
 
 async def test_cancel_does_not_create_and_says_so(session, bot_session_factory) -> None:
@@ -182,7 +220,7 @@ async def test_group_of_another_reseller_cannot_request(session, bot_session_fac
 
     ask_update = callback_update(f"greq:{line.id}", chat=other)
     await group_request.ask(ask_update, context)
-    confirm_update = callback_update(f"greqy:{line.id}", chat=other)
+    confirm_update = callback_update(f"greqy:{line.id}:3", chat=other)
     await group_request.confirm(confirm_update, context)
 
     assert "non è più disponibile" in ask_update.callback_query.edits[-1]
@@ -211,7 +249,7 @@ async def test_line_of_another_reseller_inside_a_group_is_refused(
     await session.commit()
 
     context = SimpleNamespace(bot=FakeBot(), user_data={})
-    update = callback_update(f"greqy:{foreign.id}", chat=GROUP)
+    update = callback_update(f"greqy:{foreign.id}:3", chat=GROUP)
     await group_request.confirm(update, context)
 
     assert "non è più disponibile" in update.callback_query.edits[-1]
@@ -222,8 +260,8 @@ async def test_double_confirm_does_not_duplicate(session, bot_session_factory) -
     _reseller, line = await _seed(session)
     context = SimpleNamespace(bot=FakeBot(), user_data={})
 
-    await group_request.confirm(callback_update(f"greqy:{line.id}", chat=GROUP), context)
-    await group_request.confirm(callback_update(f"greqy:{line.id}", chat=GROUP), context)
+    await group_request.confirm(callback_update(f"greqy:{line.id}:3", chat=GROUP), context)
+    await group_request.confirm(callback_update(f"greqy:{line.id}:3", chat=GROUP), context)
 
     assert len(await _requests(bot_session_factory)) == 1
 
@@ -233,7 +271,7 @@ async def test_pending_request_is_announced_instead_of_asking_again(
 ) -> None:
     _reseller, line = await _seed(session)
     context = SimpleNamespace(bot=FakeBot(), user_data={})
-    await group_request.confirm(callback_update(f"greqy:{line.id}", chat=GROUP), context)
+    await group_request.confirm(callback_update(f"greqy:{line.id}:3", chat=GROUP), context)
 
     ask_update = callback_update(f"greq:{line.id}", chat=GROUP)
     await group_request.ask(ask_update, context)

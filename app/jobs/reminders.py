@@ -226,7 +226,9 @@ async def build_group_reminder(
             "scade oggi" if delta == 0 else "scade domani" if delta == 1 else f"tra {delta} giorni"
         )
         body.append(f"• {ui.esc(title)} — {when} ({ui.italian_date(expires)})")
-    body.extend(["", "<i>Premi «Richiedi» sulla linea: ti chiedo conferma prima di inviare.</i>"])
+    body.extend(
+        ["", "<i>Premi «Richiedi» sulla linea: scegli il periodo e ti chiedo conferma.</i>"]
+    )
     buttons = [
         [
             InlineKeyboardButton(

@@ -91,7 +91,8 @@ def test_every_callback_matches_exactly_one_handler(monkeypatch) -> None:
         "custres:5",
         "custres:5:2",
         "greq:12",
-        "greqy:12",
+        "greqm:12:3",
+        "greqy:12:3",
         "greqn:12",
     ]
     for data in samples:

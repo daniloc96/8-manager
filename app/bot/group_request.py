@@ -1,8 +1,9 @@
 """Richiesta di rinnovo dal riepilogo del gruppo.
 
-Nel gruppo del rivenditore ogni linea in scadenza ha un pulsante «Richiedi».
-Il primo tap non invia niente: chiede conferma. Solo il secondo tap crea la
-richiesta, così un dito distratto non manda un rinnovo all'owner.
+Tre passaggi, nessuno dei quali invia per sbaglio:
+1. «Richiedi» sulla linea → si sceglie il periodo (`greq`);
+2. periodo scelto → «Sei sicuro di voler richiedere …?» (`greqm`);
+3. conferma → la richiesta parte e l'owner viene avvisato (`greqy`).
 
 Chi preme non deve essere il rivenditore in persona: basta che il gruppo sia
 quello collegato alla linea. La richiesta registra l'ID di chi ha premuto.
@@ -21,21 +22,23 @@ from app.bot import ui
 from app.config import get_settings
 from app.db import session_scope
 from app.models import RenewalRequest, RequestStatus, Reseller
+from app.services.months import MAX_MONTHS, MIN_MONTHS
 from app.services.queries import get_line
 from app.services.requests import RequestError, create_request
 
 logger = logging.getLogger(__name__)
 
 
-def default_months() -> int:
-    """Periodo proposto dal bottone: il primo preset configurato (1 mese)."""
-    presets = get_settings().duration_presets_list
-    return presets[0] if presets else 1
+def _parse(data: str) -> tuple[int | None, int | None]:
+    """ "greq:12" → (12, None); "greqm:12:3" → (12, 3)."""
+    parts = data.split(":")
+    line_id = int(parts[1]) if len(parts) > 1 and parts[1].isdigit() else None
+    months = int(parts[2]) if len(parts) > 2 and parts[2].isdigit() else None
+    return line_id, months
 
 
-def _line_id(data: str) -> int | None:
-    _, _, raw = data.partition(":")
-    return int(raw) if raw.isdigit() else None
+def _period(months: int) -> str:
+    return "mese" if months == 1 else "mesi"
 
 
 async def _authorized_line(session, chat_id: int, line_id: int):
@@ -64,13 +67,13 @@ async def _pending_for(session, line_id: int) -> RenewalRequest | None:
 
 
 async def ask(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Primo tap: mostra la domanda di conferma, non invia nulla."""
+    """Primo tap: si sceglie il periodo. Non invia nulla."""
     query = update.callback_query
     chat = update.effective_chat
     if query is None or query.data is None or chat is None:
         return
     await query.answer()
-    line_id = _line_id(query.data)
+    line_id, _months = _parse(query.data)
     if line_id is None:
         return
     editing = ui.Editor(query)
@@ -95,18 +98,60 @@ async def ask(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         )
         return
 
-    months = default_months()
-    period = "mese" if months == 1 else "mesi"
+    presets = get_settings().duration_presets_list
+    buttons = [
+        InlineKeyboardButton(f"{months} m", callback_data=f"greqm:{line_id}:{months}")
+        for months in presets
+    ]
+    rows = [buttons[index : index + 3] for index in range(0, len(buttons), 3)]
+    rows.append([InlineKeyboardButton("✖️ Annulla", callback_data=f"greqn:{line_id}")])
+    await editing.edit_text(
+        "❓ <b>Quanti mesi vuoi richiedere?</b>\n\n"
+        f"{ui.esc(title)} · scade {ui.italian_date(expires)}",
+        parse_mode=ParseMode.HTML,
+        reply_markup=InlineKeyboardMarkup(rows),
+    )
+
+
+async def pick_months(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Periodo scelto: si chiede conferma, senza inviare niente."""
+    query = update.callback_query
+    chat = update.effective_chat
+    if query is None or query.data is None or chat is None:
+        return
+    await query.answer()
+    line_id, months = _parse(query.data)
+    if line_id is None or months is None:
+        return
+    editing = ui.Editor(query)
+
+    if not MIN_MONTHS <= months <= MAX_MONTHS:
+        await editing.edit_text(f"Il periodo deve stare tra {MIN_MONTHS} e {MAX_MONTHS} mesi.")
+        return
+
+    async with session_scope() as session:
+        line = await _authorized_line(session, chat.id, line_id)
+        if line is None:
+            await editing.edit_text("Questa linea non è più disponibile in questo gruppo.")
+            return
+        if await _pending_for(session, line.id) is not None:
+            await editing.edit_text(
+                "⏳ C'è già una richiesta in attesa per questa linea.\nL'owner la sta valutando."
+            )
+            return
+        title = ui.line_title(line)
+        expires = line.expires_on
+
     markup = InlineKeyboardMarkup(
         [
-            [InlineKeyboardButton("✅ Sì, richiedi", callback_data=f"greqy:{line_id}")],
+            [InlineKeyboardButton("✅ Sì, richiedi", callback_data=f"greqy:{line_id}:{months}")],
             [InlineKeyboardButton("✖️ No, annulla", callback_data=f"greqn:{line_id}")],
         ]
     )
     await editing.edit_text(
         "❓ <b>Sei sicuro di voler richiedere il rinnovo?</b>\n\n"
         f"{ui.esc(title)}\n"
-        f"{months} {period} · scade {ui.italian_date(expires)}\n\n"
+        f"{months} {_period(months)} · scade {ui.italian_date(expires)}\n\n"
         "L'owner riceve la richiesta e decide.",
         parse_mode=ParseMode.HTML,
         reply_markup=markup,
@@ -114,17 +159,21 @@ async def ask(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 
 
 async def confirm(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Secondo tap: crea la richiesta e avvisa l'owner."""
+    """Terzo tap: crea la richiesta e avvisa l'owner."""
     query = update.callback_query
     chat = update.effective_chat
     user = update.effective_user
     if query is None or query.data is None or chat is None:
         return
     await query.answer()
-    line_id = _line_id(query.data)
-    if line_id is None:
+    line_id, months = _parse(query.data)
+    if line_id is None or months is None:
         return
     editing = ui.Editor(query)
+
+    if not MIN_MONTHS <= months <= MAX_MONTHS:
+        await editing.edit_text(f"Il periodo deve stare tra {MIN_MONTHS} e {MAX_MONTHS} mesi.")
+        return
 
     async with session_scope() as session:
         line = await _authorized_line(session, chat.id, line_id)
@@ -138,7 +187,6 @@ async def confirm(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
             )
             return
 
-        months = default_months()
         try:
             request = await create_request(
                 session,
@@ -156,11 +204,10 @@ async def confirm(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         title = ui.line_title(line)
         expires = line.expires_on
 
-    period = "mese" if months == 1 else "mesi"
     await editing.edit_text(
         "✅ <b>Richiesta inviata</b>\n\n"
         f"{ui.esc(title)}\n"
-        f"{months} {period} · scade {ui.italian_date(expires)}\n"
+        f"{months} {_period(months)} · scade {ui.italian_date(expires)}\n"
         "Ti avviso appena l'owner risponde.",
         parse_mode=ParseMode.HTML,
     )
@@ -179,7 +226,7 @@ async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     if query is None or query.data is None:
         return
     await query.answer()
-    line_id = _line_id(query.data)
+    line_id, _months = _parse(query.data)
     if line_id is None:
         return
     await ui.Editor(query).edit_text(
@@ -210,13 +257,12 @@ async def _notify_owner(
     owner = get_settings().owner_telegram_id
     if owner is None or context.bot is None:
         return
-    period = "mese" if months == 1 else "mesi"
     try:
         await context.bot.send_message(
             chat_id=owner,
             text=(
                 f"🔔 <b>Nuova richiesta dal gruppo</b>\n\n"
-                f"{ui.esc(title)}\n{months} {period} · #{request_id}\n"
+                f"{ui.esc(title)}\n{months} {_period(months)} · #{request_id}\n"
                 f"da {ui.esc(who)} ({ui.esc(chat_title or 'gruppo')})\n\n"
                 "Rispondi con <code>/richieste</code>."
             ),
