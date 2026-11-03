@@ -29,7 +29,7 @@ allineate ai rispettivi remoti.
 | Bot | `@l7_manager_bot`, polling, nessuna porta pubblica |
 | DB | `/data/8manager.sqlite3` (SQLite WAL), backup in `/data/backups` |
 | Job | heartbeat 60 s · reminder 09:00 · backup 03:15 (Europe/Rome) |
-| Ultimo deploy | `d3974d9` · 2026-11-03T09:09Z · schema `4d2c9a1b7e38` · 263 test · CI verde |
+| Ultimo deploy | `f83d446` · 2026-11-03T11:29Z · schema `4d2c9a1b7e38` · 275 test · CI verde |
 
 ```bash
 ./scripts/deploy.sh            # dry-run
