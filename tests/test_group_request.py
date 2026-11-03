@@ -159,6 +159,7 @@ async def test_second_tap_creates_the_request_and_tells_the_owner(
     assert owner_messages, "l'owner deve saperlo subito"
     assert "Nuova richiesta dal gruppo" in owner_messages[0]
     assert "Anna Bianchi" in owner_messages[0]
+    assert "1 mese" in owner_messages[0] and "1 mesi" not in owner_messages[0]
 
 
 async def test_cancel_does_not_create_and_says_so(session, bot_session_factory) -> None:

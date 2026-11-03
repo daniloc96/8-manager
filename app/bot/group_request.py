@@ -210,12 +210,13 @@ async def _notify_owner(
     owner = get_settings().owner_telegram_id
     if owner is None or context.bot is None:
         return
+    period = "mese" if months == 1 else "mesi"
     try:
         await context.bot.send_message(
             chat_id=owner,
             text=(
                 f"🔔 <b>Nuova richiesta dal gruppo</b>\n\n"
-                f"{ui.esc(title)}\n{months} mesi · #{request_id}\n"
+                f"{ui.esc(title)}\n{months} {period} · #{request_id}\n"
                 f"da {ui.esc(who)} ({ui.esc(chat_title or 'gruppo')})\n\n"
                 "Rispondi con <code>/richieste</code>."
             ),
