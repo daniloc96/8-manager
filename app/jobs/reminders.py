@@ -168,13 +168,14 @@ async def build_group_reminder(
 
     Solo le linee di quel rivenditore, con la finestra di `reminder_days`
     (oggi compreso). Nessun pulsante: in un gruppo i comandi dell'owner non
-    hanno senso. Se non c'è nulla da dire non si invia niente.
+    hanno senso. Il messaggio parte ogni giorno, anche senza scadenze.
     """
     settings = get_settings()
     warn_days = settings.reminder_days
     session_factory = factory or get_session_factory()
 
     rows: list[tuple[int, str, date]] = []
+    candidates = 0
     async with session_factory() as session:
         muted = await muted_line_ids(session, today)
         lines = list(
@@ -193,6 +194,7 @@ async def build_group_reminder(
             delta = days_left(line.expires_on, today)
             if delta < 0 or delta > warn_days:
                 continue
+            candidates += 1
             if not await _claim(
                 session,
                 kind=KIND_GROUP_EXPIRING,
@@ -204,13 +206,21 @@ async def build_group_reminder(
             rows.append((delta, ui.line_title(line), line.expires_on))
         await session.commit()
 
-    if not rows:
+    if not rows and candidates:
+        # C'erano scadenze ma erano già state annunciate oggi: non si ripete,
+        # e non si finge che non ci sia nulla.
         return None
 
+    # Il messaggio parte ogni giorno, anche a lista vuota: è la conferma che
+    # il gruppo è collegato e che il bot sta guardando le scadenze giuste.
     body = [
         f"⏰ <b>Scadenze</b> · prossimi {warn_days} giorni",
         "",
     ]
+    if not rows:
+        body.append("<i>Nessuna scadenza nei prossimi " + str(warn_days) + " giorni.</i>")
+        return "\n".join(body), None
+
     for delta, title, expires in sorted(rows):
         when = (
             "scade oggi" if delta == 0 else "scade domani" if delta == 1 else f"tra {delta} giorni"

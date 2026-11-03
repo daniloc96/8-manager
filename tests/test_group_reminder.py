@@ -113,7 +113,8 @@ async def test_group_message_says_when_each_line_expires(session, engine) -> Non
     assert "scade domani" in body
 
 
-async def test_no_message_when_nothing_is_due(session, engine) -> None:
+async def test_daily_message_also_when_nothing_is_due(session, engine) -> None:
+    """«Giornalmente» vale anche a lista vuota: è la conferma che il bot guarda."""
     luca = await _reseller(session, "Luca", group_id=-100999)
     await _line(session, luca.id, expires=date(2027, 6, 1), name="Lontano")
 
@@ -121,7 +122,9 @@ async def test_no_message_when_nothing_is_due(session, engine) -> None:
         TODAY, reseller_id=luca.id, chat_id=-100999, factory=async_sessionmaker(engine)
     )
 
-    assert built is None
+    assert built is not None
+    body = built[0]
+    assert "Nessuna scadenza nei prossimi 3 giorni" in body
 
 
 async def test_same_day_second_run_does_not_repeat(session, engine) -> None:

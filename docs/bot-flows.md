@@ -170,9 +170,10 @@ ora del reminder owner) un messaggio con le scadenze dei **prossimi 3 giorni**
 Per chiedere un rinnovo: /richiedi
 ```
 
-Niente pulsanti: in gruppo i comandi dell'owner non hanno senso. Se non c'è
-nulla in scadenza il messaggio non parte, e un secondo giro dello stesso giorno
-non ripete le stesse linee (le notifiche sono registrate per chat e giorno).
+Niente pulsanti: in gruppo i comandi dell'owner non hanno senso. Il messaggio
+parte ogni giorno, e a lista vuota dice «Nessuna scadenza nei prossimi 3
+giorni». Un secondo giro dello stesso giorno non ripete le stesse linee (le
+notifiche sono registrate per chat e giorno).
 Serve che il gruppo sia collegato e che il rivenditore abbia `notify` attivo.
 
 ### Nuova linea (bot-first)
