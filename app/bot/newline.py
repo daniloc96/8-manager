@@ -20,6 +20,7 @@ from app.services.anagrafica import ALIAS_MAX, LABEL_MAX
 from app.services.lines import LineDraft, create_customer_and_line
 from app.services.months import MAX_MONTHS, MIN_MONTHS
 from app.services.text import format_eur, normalize_key, parse_price_to_cents
+from app.services.vod import vod_link
 
 logger = logging.getLogger(__name__)
 
@@ -342,6 +343,7 @@ async def _create(update: Update, context: ContextTypes.DEFAULT_TYPE, query) -> 
         line_id = line.id
         label = ui.line_title(line)
         domain = await settings_service.read_value(session, "vod_domain")
+        link = vod_link(domain, username, password)
 
     context.user_data.pop("new_line", None)
 
@@ -359,13 +361,12 @@ async def _create(update: Update, context: ContextTypes.DEFAULT_TYPE, query) -> 
         body.append(f"ID pannello: <code>{ui.esc(state['panel_external_id'])}</code>")
     if state.get("panel_access_code"):
         body.append(f"codice: <code>{ui.esc(state['panel_access_code'])}</code>")
-    if service is Service.LIVE_VOD and domain:
+    if service is Service.LIVE_VOD and link:
         body.extend(
             [
                 "",
                 "<b>Link VOD da consegnare</b>",
-                f"<code>{ui.esc(domain)}/get.php?username={username}"
-                f"&amp;password={password}</code>",
+                f"<code>{ui.esc(link)}</code>",
             ]
         )
     body.extend(["", "La linea resta «da creare nel pannello» finché il sync non la trova."])

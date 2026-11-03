@@ -125,8 +125,10 @@ Bot (owner):
   la stessa voce è nel menu **Modifica** della singola linea. Il campo vive sulla
   linea, quindi il sync non lo sovrascrive;
 - **Vista Codici**: «🔑 Codici» dalla scheda cliente o dalla linea elenca per
-  ogni pannello username, password, codice, ID e scadenza salvati dal sync. Solo
-  owner. 8TV+ non ha password, il VOD non ha codice: la vista lo dice;
+  ogni pannello username, password, codice, ID e scadenza salvati dal sync. Per
+  il VOD aggiunge il link `get.php?...&type=m3u_plus&output=mpegts` costruito da
+  `vod_domain` + credenziali (stessa funzione usata da `/nuovo`). Solo owner.
+  8TV+ non ha password, il VOD non ha codice: la vista lo dice;
 - **«Non rinnova» dal reminder**: ogni linea in scadenza ha il pulsante
   **🚫 Non rinnova**, con conferma prima di scrivere. La marcatura non tocca
   il pannello: è un promemoria che resta nel reminder delle 09:00 (anche se la
@@ -197,7 +199,7 @@ Debito tecnico noto:
 ```bash
 uv sync                                  # dipendenze
 uv run ruff check . && uv run ruff format --check .
-uv run pytest -q                         # 233 test al 2026-11-03
+uv run pytest -q                         # 239 test al 2026-11-03
 ./scripts/deploy.sh --apply              # produzione
 ./scripts/verify.sh
 ```

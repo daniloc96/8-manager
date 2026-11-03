@@ -113,10 +113,19 @@ di riepilogo sul cliente. Per una singola linea si usa la stessa voce dentro
 **Modifica** dalla scheda linea.
 
 **🔑 Codici** mostra quello che il sync ha salvato per ogni pannello della linea:
-username, password, codice di accesso, ID e scadenza del pannello. I pannelli non
-espongono gli stessi campi: 8TV+ non ha password (si accede con il codice, che
-coincide con lo username), il VOD non ha codice di accesso. Il pulsante è solo
-per l'owner.
+username, password, codice di accesso, ID e scadenza del pannello. Per il VOD
+c'è anche il **link di playlist** da consegnare al cliente:
+
+```
+<dominio>/get.php?username=<username>&password=<password>&type=m3u_plus&output=mpegts
+```
+
+Il dominio è l'impostazione `vod_domain` (menu Impostazioni); username e password
+vengono dal sync. Se manca uno dei tre pezzi il link non si mostra e la vista
+dice quale manca. I pannelli non espongono gli stessi campi: 8TV+ non ha password
+(si accede con il codice, che coincide con lo username), il VOD non ha codice di
+accesso. Il pulsante è solo per l'owner, e lo stesso link compare nel messaggio
+finale di `/nuovo`.
 
 ### Rinnovo
 

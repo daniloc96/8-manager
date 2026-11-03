@@ -17,6 +17,8 @@ from app.bot.auth import access_for
 from app.db import session_scope
 from app.models import Platform
 from app.services.queries import customer_overview
+from app.services.settings import read_value
+from app.services.vod import vod_link
 
 logger = logging.getLogger(__name__)
 
@@ -25,7 +27,7 @@ MAX_LINES = 12
 MISSING = "—"
 
 
-def _line_block(line, today) -> list[str]:
+def _line_block(line, domain: str | None) -> list[str]:
     parts = [f"<b>{ui.esc(ui.line_title(line))}</b>"]
     panels = sorted(line.panel_lines, key=lambda item: item.platform.value)
     if not panels:
@@ -48,7 +50,17 @@ def _line_block(line, today) -> list[str]:
             fields.append(f"ID: <code>{ui.esc(panel.external_id)}</code>")
         if panel.expires_on:
             fields.append(f"scade sul pannello: {ui.italian_date(panel.expires_on)}")
-        if not panel.password:
+        # Il link di playlist ha senso solo per il VOD: è quello che si
+        # consegna al cliente.
+        if panel.platform == Platform.VOD_NEWVOD:
+            link = vod_link(domain, panel.username, panel.password)
+            if link is not None:
+                fields.append(f"link VOD: <code>{ui.esc(link)}</code>")
+            elif not domain:
+                fields.append("<i>link VOD non disponibile: dominio non impostato</i>")
+            elif not panel.password:
+                fields.append("<i>link VOD non disponibile: manca la password</i>")
+        if not panel.password and panel.platform != Platform.VOD_NEWVOD:
             if panel.platform == Platform.LIVE_8TVPLUS:
                 fields.append("<i>nessuna password: sul pannello si accede con il codice</i>")
             else:
@@ -76,9 +88,10 @@ async def on_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
         if overview is None:
             await query.answer("Cliente non trovato.", show_alert=True)
             return
+        domain = await read_value(session, "vod_domain")
         lines = overview.lines[:MAX_LINES]
         hidden = len(overview.lines) - len(lines)
-        blocks = [_line_block(line, None) for line in lines]
+        blocks = [_line_block(line, domain) for line in lines]
         name = overview.customer.name
 
     body = [f"🔑 <b>Codici · {ui.esc(name)}</b>", ""]
