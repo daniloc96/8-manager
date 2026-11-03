@@ -9,7 +9,7 @@ Il bot gira su `bitch-0` come `@l7_manager_bot`; l'import ha caricato 176 righe
 di pannello (84 clienti). Cosa sa fare oggi:
 
 - menu con scadenze (scadute, oggi, prossimi giorni), ricerca libera e scheda
-  linea con credenziali dei pannelli;
+  linea con credenziali dei pannelli e link Live/VOD;
 - rinnovo con un tap, prezzo modificabile, storico e undo del rinnovo entro
   15 minuti;
 - incassi del mese raggruppati per rivenditore, registro rivenditori;
@@ -117,6 +117,12 @@ Il sync è in `app/panels/`:
 - `lucky.py` — cookie + CSRF, usato sia per LUCKY LIVE sia per VOD;
 - `sync.py` — upsert, accoppiamento per username, import, riconciliazione;
 - `packages.py` — pacchetti risolti per nome, durate 8Plus in giorni.
+
+Il sync legge anche `/lines/meta` di LUCKY LIVE e VOD e salva in `settings`
+`live_domain` e `vod_domain`: sono i domini globali usati per costruire i link
+`get.php?username=...&password=...&type=m3u_plus&output=mpegts` nella scheda e
+nella vista Codici. 8Plus non espone un dominio di download: le sue linee
+restano con il codice.
 
 Prima esecuzione consigliata:
 

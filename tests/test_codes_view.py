@@ -251,6 +251,38 @@ async def test_codes_show_vod_link_only_for_vod(session, bot_session_factory) ->
     assert body.count("/get.php?") == 1
 
 
+async def test_codes_show_live_and_vod_links(session, bot_session_factory) -> None:
+    from app.models import Setting
+
+    session.add_all(
+        [
+            Setting(key="live_domain", value="http://hulu.example.org:23000"),
+            Setting(key="vod_domain", value="http://vod.example.org:24000"),
+        ]
+    )
+    customer, line = await _seed(session)
+    session.add(
+        PanelLine(
+            platform=Platform.VOD_NEWVOD,
+            line_id=line.id,
+            external_id="903",
+            username="mario-vod",
+            username_key="mario-vod-both",
+            password="vodpass",
+            first_seen_at=datetime.now(),
+        )
+    )
+    await session.commit()
+
+    update = callback_update(f"codes:{customer.id}")
+    await codes.on_callback(update, SimpleNamespace(user_data={}))
+
+    body = update.callback_query.edits[-1]
+    assert "link Live: <code>http://hulu.example.org:23000/get.php?username=mario2026" in body
+    assert "link VOD: <code>http://vod.example.org:24000/get.php?username=mario-vod" in body
+    assert body.count("/get.php?") == 2
+
+
 async def test_vod_link_missing_password_is_explained(session, bot_session_factory) -> None:
     from app.models import Setting
 

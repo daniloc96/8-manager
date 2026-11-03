@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import html
+from collections.abc import Sequence
 from datetime import date
 
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup
@@ -90,7 +91,11 @@ def line_row(line: Line, today: date) -> str:
     return f"• {esc(line_title(line))} — {esc(expiry_phrase(line, today))} · {price}"
 
 
-def line_card(line: Line, today: date) -> str:
+def line_card(
+    line: Line,
+    today: date,
+    downloads: Sequence[tuple[str, str]] = (),
+) -> str:
     customer = line.customer
     parts = [
         f"🎬 <b>{esc(line_title(line))}</b>",
@@ -110,11 +115,17 @@ def line_card(line: Line, today: date) -> str:
     vod = panel_for(line, Platform.VOD_NEWVOD)
     technical: list[str] = []
     if live is not None:
-        technical.append(f"Live: <code>{esc(live.username)}</code>")
+        if live.platform is Platform.LIVE_8TVPLUS:
+            technical.append(f"Codice: <code>{esc(live.username)}</code>")
+        else:
+            technical.append(f"Live: <code>{esc(live.username)}</code>")
     if vod is not None:
         technical.append(f"VOD: <code>{esc(vod.username)}</code>")
     if technical:
         parts.append(" · ".join(technical))
+
+    for label, url in downloads:
+        parts.append(f"{label}: <code>{esc(url)}</code>")
 
     parts.append(f"<b>{esc(expiry_phrase(line, today))}</b>")
     if getattr(line, "no_renewal", False):
@@ -143,6 +154,35 @@ def menu_keyboard(*, is_owner: bool, is_reseller: bool = False) -> InlineKeyboar
         rows.append([InlineKeyboardButton("🔁 Richiedi rinnovo", callback_data="menu:request")])
     if is_owner:
         rows.append([InlineKeyboardButton("⚙️ Impostazioni", callback_data="menu:settings")])
+    return InlineKeyboardMarkup(rows)
+
+
+def due_keyboard(lines: list[Line], *, is_owner: bool) -> InlineKeyboardMarkup:
+    """Bottoni della lista scadenze: owner rinnova, rivenditore richiede."""
+    rows: list[list[InlineKeyboardButton]] = []
+    for line in lines:
+        first_name = line.customer.name.split()[0] if line.customer.name else "linea"
+        if is_owner:
+            rows.append(
+                [
+                    InlineKeyboardButton(
+                        f"Rinnova {first_name}",
+                        callback_data=f"renew:{line.id}:pick",
+                    ),
+                    InlineKeyboardButton("Apri", callback_data=f"card:{line.id}"),
+                ]
+            )
+        else:
+            rows.append(
+                [
+                    InlineKeyboardButton("Apri", callback_data=f"card:{line.id}"),
+                    InlineKeyboardButton(
+                        f"Richiedi · {first_name}",
+                        callback_data=f"rq:{line.id}",
+                    ),
+                ]
+            )
+    rows.append([InlineKeyboardButton("🏠 Menu", callback_data="menu:home")])
     return InlineKeyboardMarkup(rows)
 
 

@@ -238,3 +238,77 @@ async def test_lucky_login_csrf_and_parsing() -> None:
     assert rows[0].expires_on == date(2026, 11, 15)
     assert rows[0].note == "Paolo Consiglio"
     assert packages[0]["id"] == 42
+
+
+async def test_lucky_reads_download_domain_from_meta() -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path == "/api/v1/auth/login" and request.method == "GET":
+            return httpx.Response(200, json={"csrf": "seed-csrf"})
+        if request.url.path == "/api/v1/auth/login" and request.method == "POST":
+            return httpx.Response(200, json={"ok": True})
+        if request.url.path == "/api/v1/session":
+            return httpx.Response(200, json={"csrf": "live-csrf"})
+        if request.url.path == "/api/v1/lines/meta":
+            return httpx.Response(
+                200,
+                json={
+                    "ok": True,
+                    "data": {"download": {"base_url": "http://hulu.test:23000/"}},
+                },
+            )
+        return httpx.Response(404)
+
+    adapter = LuckyAdapter(
+        platform=Platform.LIVE_HALLO,
+        base_url="http://panel.test",
+        username="owner@example.test",
+        password="password",
+        tz="Europe/Rome",
+        transport=httpx.MockTransport(handler),
+    )
+    try:
+        domain = await adapter.fetch_download_domain()
+    finally:
+        await adapter.aclose()
+
+    assert domain == "http://hulu.test:23000"
+
+
+async def test_lucky_meta_without_download_returns_none() -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path == "/api/v1/auth/login" and request.method == "GET":
+            return httpx.Response(200, json={"csrf": "seed-csrf"})
+        if request.url.path == "/api/v1/auth/login" and request.method == "POST":
+            return httpx.Response(200, json={"ok": True})
+        if request.url.path == "/api/v1/session":
+            return httpx.Response(200, json={"csrf": "live-csrf"})
+        if request.url.path == "/api/v1/lines/meta":
+            return httpx.Response(200, json={"ok": True, "data": {"download": {}}})
+        return httpx.Response(404)
+
+    adapter = LuckyAdapter(
+        platform=Platform.VOD_NEWVOD,
+        base_url="http://panel.test",
+        username="owner@example.test",
+        password="password",
+        tz="Europe/Rome",
+        transport=httpx.MockTransport(handler),
+    )
+    try:
+        assert await adapter.fetch_download_domain() is None
+    finally:
+        await adapter.aclose()
+
+
+async def test_eightplus_has_no_download_domain() -> None:
+    adapter = EightPlusAdapter(
+        base_url="https://panel.test",
+        email="owner@example.test",
+        password="password",
+        tz="Europe/Rome",
+        transport=httpx.MockTransport(lambda request: httpx.Response(500)),
+    )
+    try:
+        assert await adapter.fetch_download_domain() is None
+    finally:
+        await adapter.aclose()

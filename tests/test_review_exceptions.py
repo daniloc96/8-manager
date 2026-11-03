@@ -29,6 +29,9 @@ class FakeAdapter:
     async def fetch_lines(self) -> list[PanelRow]:
         return list(self._rows)
 
+    async def fetch_download_domain(self) -> str | None:
+        return None
+
     async def aclose(self) -> None:
         return None
 

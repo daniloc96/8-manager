@@ -13,6 +13,7 @@ from app.bot.auth import access_for
 from app.config import get_settings
 from app.db import session_scope
 from app.models import AuditLog, Platform, RenewalSource
+from app.services.downloads import line_downloads, load_domains
 from app.services.lines import renew_line
 from app.services.months import MAX_MONTHS, MIN_MONTHS
 from app.services.queries import get_line, panel_for
@@ -67,7 +68,8 @@ async def send_card(
             issue = None
         else:
             issue = await open_issue(session, line_id=line.id) if access.is_owner else None
-            body = ui.line_card(line, _today())
+            domains = await load_domains(session)
+            body = ui.line_card(line, _today(), line_downloads(line, domains))
             if issue is not None:
                 body = f"{body}\n⚠️ <i>{ui.esc(describe(issue))}</i>"
             if note:
@@ -111,7 +113,10 @@ async def pick_months(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
             await query.edit_message_text("Linea non trovata o disattivata.")
             return
         presets = get_settings().duration_presets_list
-        body = f"{ui.line_card(line, _today())}\n\n<b>Quanti mesi?</b>"
+        domains = await load_domains(session)
+        body = (
+            f"{ui.line_card(line, _today(), line_downloads(line, domains))}\n\n<b>Quanti mesi?</b>"
+        )
 
     await query.edit_message_text(
         body,

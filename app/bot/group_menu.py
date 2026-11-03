@@ -259,11 +259,11 @@ def _customer_actions(customer_id: int, lines) -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(rows)
 
 
-def _credentials_block(line, domain: str | None) -> list[str]:
+def _credentials_block(line, domains) -> list[str]:
     """Codici della linea come li espone il pannello, senza inventare niente."""
     from app.bot.codes import _line_block
 
-    return _line_block(line, domain)
+    return _line_block(line, domains)
 
 
 async def _show_card(editing, session, data: str, reseller_id: int) -> None:
@@ -343,7 +343,7 @@ async def _show_due(editing, session, data: str, reseller_id: int) -> None:
 
 async def _show_codes(editing, session, data: str, reseller_id: int) -> None:
     """«Codici»: username, password e link delle linee del cliente."""
-    from app.services.settings import read_value
+    from app.services.downloads import load_domains
 
     customer_id = _customer_id(data)
     overview = (
@@ -355,10 +355,10 @@ async def _show_codes(editing, session, data: str, reseller_id: int) -> None:
         await editing.edit_text("Cliente non disponibile in questo gruppo.", reply_markup=_back())
         return
 
-    domain = await read_value(session, "vod_domain")
+    domains = await load_domains(session)
     parts = [f"🔑 <b>Codici · {ui.esc(overview.customer.name)}</b>", ""]
     for line in overview.lines:
-        parts.extend(_credentials_block(line, domain))
+        parts.extend(_credentials_block(line, domains))
         parts.append("")
     parts.append("<i>I valori arrivano dal pannello: quello che non espone resta vuoto.</i>")
     await editing.edit_text(

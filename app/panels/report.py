@@ -111,6 +111,10 @@ def _result_line(result: PlatformResult) -> str:
         parts.append(f"{result.renewals} rinnovi registrati")
     if result.historical:
         parts.append(f"{result.historical} storiche")
+    if result.domain_changed:
+        parts.append("dominio aggiornato")
+    if result.domain_error:
+        parts.append("dominio non letto")
     if result.missing:
         parts.append(f"{result.missing} sparite")
     if result.review:

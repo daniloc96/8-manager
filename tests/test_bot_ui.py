@@ -125,6 +125,77 @@ def test_reseller_label_on_card() -> None:
     assert "Diretto" not in ui.line_card(line, TODAY)
 
 
+def test_line_card_shows_download_links() -> None:
+    line = make_line()
+    line.panel_lines = [
+        PanelLine(
+            platform=Platform.LIVE_HALLO,
+            username="mario-live",
+            username_key="mario-live",
+            password="live-pass",
+        ),
+        PanelLine(
+            platform=Platform.VOD_NEWVOD,
+            username="mario-vod",
+            username_key="mario-vod",
+            password="vod-pass",
+        ),
+    ]
+
+    card = ui.line_card(
+        line,
+        TODAY,
+        [
+            ("Live", "http://hulu.test/get.php?username=mario-live&password=live-pass"),
+            ("VOD", "http://vod.test/get.php?username=mario-vod&password=vod-pass"),
+        ],
+    )
+
+    assert "Live: <code>http://hulu.test" in card
+    assert "VOD: <code>http://vod.test" in card
+    assert "&amp;password=live-pass" in card
+
+
+def test_line_card_uses_code_label_for_8plus() -> None:
+    line = make_line(service=Service.LIVE)
+    line.panel_lines = [
+        PanelLine(
+            platform=Platform.LIVE_8TVPLUS,
+            username="CODE1",
+            username_key="code1",
+            access_code="CODE1",
+        )
+    ]
+
+    card = ui.line_card(line, TODAY)
+
+    assert "Codice: <code>CODE1</code>" in card
+    assert "Live: <code>CODE1</code>" not in card
+
+
+def test_due_keyboard_reseller_can_open_card_and_request() -> None:
+    line = make_line()
+    line.id = 7
+
+    markup = ui.due_keyboard([line], is_owner=False)
+    data = [button.callback_data for row in markup.inline_keyboard for button in row]
+
+    assert "card:7" in data
+    assert "rq:7" in data
+
+
+def test_due_keyboard_owner_can_renew_and_open_card() -> None:
+    line = make_line()
+    line.id = 7
+
+    markup = ui.due_keyboard([line], is_owner=True)
+    data = [button.callback_data for row in markup.inline_keyboard for button in row]
+
+    assert "renew:7:pick" in data
+    assert "card:7" in data
+    assert "rq:7" not in data
+
+
 def test_customer_search_key_used_in_ui_does_not_crash() -> None:
     customer = Customer(name="Cafè", search_key=customer_search_key("Cafè"))
     line = make_line(customer=customer)

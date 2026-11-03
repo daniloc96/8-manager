@@ -14,6 +14,7 @@ from app.models import (
     Renewal,
     RenewalSource,
     Service,
+    Setting,
     SyncRun,
     SyncStatus,
 )
@@ -43,13 +44,19 @@ def row(
 
 
 class FakeAdapter:
-    def __init__(self, platform: Platform, rows: list[PanelRow]) -> None:
+    def __init__(
+        self, platform: Platform, rows: list[PanelRow], *, domain: str | None = None
+    ) -> None:
         self.platform = platform
         self._rows = rows
+        self._domain = domain
         self.closed = False
 
     async def fetch_lines(self) -> list[PanelRow]:
         return list(self._rows)
+
+    async def fetch_download_domain(self) -> str | None:
+        return self._domain
 
     async def aclose(self) -> None:
         self.closed = True
@@ -62,6 +69,9 @@ class BrokenAdapter:
 
     async def fetch_lines(self) -> list[PanelRow]:
         raise RuntimeError("pannello irraggiungibile")
+
+    async def fetch_download_domain(self) -> str | None:
+        return None
 
     async def aclose(self) -> None:
         self.closed = True
@@ -421,6 +431,71 @@ async def test_run_sync_dry_run_writes_nothing(engine) -> None:
         assert await session.scalar(select(func.count(PanelLine.id))) == 0
         assert await session.scalar(select(func.count(Line.id))) == 0
         assert await session.scalar(select(func.count(SyncRun.id))) == 0
+
+
+async def test_run_sync_saves_download_domain(engine) -> None:
+    factory = async_sessionmaker(engine, expire_on_commit=False)
+    adapter = FakeAdapter(
+        Platform.LIVE_HALLO,
+        [row(Platform.LIVE_HALLO, "mario")],
+        domain="http://hulu.test:23000/",
+    )
+
+    report = await run_sync(
+        [adapter],
+        today=date(2026, 11, 1),
+        session_factory=factory,
+    )
+
+    assert report.results[0].domain == "http://hulu.test:23000/"
+    assert report.results[0].domain_changed is True
+    async with factory() as session:
+        setting = await session.get(Setting, "live_domain")
+        assert setting is not None
+        assert setting.value == "http://hulu.test:23000"
+
+
+async def test_run_sync_dry_run_does_not_save_domain(engine) -> None:
+    factory = async_sessionmaker(engine, expire_on_commit=False)
+    adapter = FakeAdapter(
+        Platform.LIVE_HALLO,
+        [row(Platform.LIVE_HALLO, "mario")],
+        domain="http://hulu.test:23000",
+    )
+
+    report = await run_sync(
+        [adapter],
+        today=date(2026, 11, 1),
+        dry_run=True,
+        session_factory=factory,
+    )
+
+    assert report.results[0].domain_changed is True
+    async with factory() as session:
+        assert await session.get(Setting, "live_domain") is None
+
+
+async def test_run_sync_survives_domain_error(engine) -> None:
+    factory = async_sessionmaker(engine, expire_on_commit=False)
+
+    class DomainBrokenAdapter(FakeAdapter):
+        async def fetch_download_domain(self) -> str | None:
+            raise RuntimeError("meta non raggiungibile")
+
+    adapter = DomainBrokenAdapter(Platform.LIVE_HALLO, [row(Platform.LIVE_HALLO, "mario")])
+
+    report = await run_sync(
+        [adapter],
+        today=date(2026, 11, 1),
+        import_missing=True,
+        session_factory=factory,
+    )
+
+    assert report.results[0].status is SyncStatus.SUCCESS
+    assert report.results[0].imported == 1
+    assert "meta non raggiungibile" in (report.results[0].domain_error or "")
+    async with factory() as session:
+        assert await session.get(Setting, "live_domain") is None
 
 
 async def test_run_sync_records_run(engine) -> None:

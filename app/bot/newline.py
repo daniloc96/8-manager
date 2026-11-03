@@ -14,13 +14,13 @@ from app.bot import ui
 from app.bot.auth import access_for
 from app.config import get_settings
 from app.db import session_scope
-from app.models import PanelLine, Reseller, Service
-from app.services import settings as settings_service
+from app.models import PanelLine, Platform, Reseller, Service
 from app.services.anagrafica import ALIAS_MAX, LABEL_MAX
+from app.services.downloads import load_domains
 from app.services.lines import LineDraft, create_customer_and_line
 from app.services.months import MAX_MONTHS, MIN_MONTHS
 from app.services.text import format_eur, normalize_key, parse_price_to_cents
-from app.services.vod import vod_link
+from app.services.vod import download_link
 
 logger = logging.getLogger(__name__)
 
@@ -342,10 +342,19 @@ async def _create(update: Update, context: ContextTypes.DEFAULT_TYPE, query) -> 
         expires = line.expires_on
         line_id = line.id
         label = ui.line_title(line)
-        domain = await settings_service.read_value(session, "vod_domain")
-        link = vod_link(domain, username, password)
+        domains = await load_domains(session)
 
     context.user_data.pop("new_line", None)
+
+    links: list[tuple[str, str]] = []
+    if service is Service.LIVE_VOD:
+        for link_label, platform in (
+            ("Live", Platform.LIVE_HALLO),
+            ("VOD", Platform.VOD_NEWVOD),
+        ):
+            url = download_link(domains.get(platform), username, password)
+            if url:
+                links.append((link_label, url))
 
     panels = "LIVE e VOD (stesso username)" if service is Service.LIVE_VOD else "LIVE"
     body = [
@@ -361,14 +370,9 @@ async def _create(update: Update, context: ContextTypes.DEFAULT_TYPE, query) -> 
         body.append(f"ID pannello: <code>{ui.esc(state['panel_external_id'])}</code>")
     if state.get("panel_access_code"):
         body.append(f"codice: <code>{ui.esc(state['panel_access_code'])}</code>")
-    if service is Service.LIVE_VOD and link:
-        body.extend(
-            [
-                "",
-                "<b>Link VOD da consegnare</b>",
-                f"<code>{ui.esc(link)}</code>",
-            ]
-        )
+    if service is Service.LIVE_VOD and links:
+        body.extend(["", "<b>Link da consegnare</b>"])
+        body.extend(f"{link_label}: <code>{ui.esc(url)}</code>" for link_label, url in links)
     body.extend(["", "La linea resta «da creare nel pannello» finché il sync non la trova."])
 
     await query.edit_message_text(

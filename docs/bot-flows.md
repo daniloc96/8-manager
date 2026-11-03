@@ -11,8 +11,8 @@ Differenze rispetto alla specifica originale:
   esce dal bot solo quando le righe spariscono dai pannelli (`prune-missing`),
   perché la cancellazione remota è la fonte di verità;
 - etichetta, alias, note e dati tecnici si modificano dalla scheda con
-  **Modifica**, un campo alla volta; il link VOD non è modificabile perché si
-  genera dalle credenziali;
+  **Modifica**, un campo alla volta; i link Live/VOD non sono modificabili
+  perché si generano dalle credenziali e dai domini dei pannelli;
 - il rinnovo non «resta in attesa di conferma pannello»: il sync successivo
   riallinea comunque la scadenza e l'eventuale differenza appare nel report;
 - il job delle 09:00 manda **all'owner solo le linee a gestione diretta** (senza
@@ -70,6 +70,8 @@ cliente le elenca tutte con il totale mensile.
 alias: "Mario il rosso" · Diretto
 Live + VOD · 5,00 €/mese
 Live: mario2026 · VOD: mario-vod
+Live: http://hulu.../get.php?username=...&password=...&type=m3u_plus&output=mpegts
+VOD: http://listavod.../get.php?username=...&password=...&type=m3u_plus&output=mpegts
 scade il 13/11/2026 (tra 11 giorni)
 
 [✅ Rinnova] [💶 Prezzo]
@@ -113,19 +115,22 @@ di riepilogo sul cliente. Per una singola linea si usa la stessa voce dentro
 **Modifica** dalla scheda linea.
 
 **🔑 Codici** mostra quello che il sync ha salvato per ogni pannello della linea:
-username, password, codice di accesso, ID e scadenza del pannello. Per il VOD
-c'è anche il **link di playlist** da consegnare al cliente:
+username, password, codice di accesso, ID e scadenza del pannello. Per Live e
+VOD c'è anche il **link di playlist** da consegnare al cliente:
 
 ```
 <dominio>/get.php?username=<username>&password=<password>&type=m3u_plus&output=mpegts
 ```
 
-Il dominio è l'impostazione `vod_domain` (menu Impostazioni); username e password
-vengono dal sync. Se manca uno dei tre pezzi il link non si mostra e la vista
-dice quale manca. I pannelli non espongono gli stessi campi: 8TV+ non ha password
-(si accede con il codice, che coincide con lo username), il VOD non ha codice di
-accesso. Il pulsante è solo per l'owner, e lo stesso link compare nel messaggio
-finale di `/nuovo`.
+I domini sono le impostazioni `live_domain` e `vod_domain` (menu Impostazioni):
+li allinea il sync dai `download.base_url` dei pannelli, ma restano
+modificabili a mano. Username e password vengono dal sync e sono quelli della
+singola riga: Live e VOD possono averli diversi. Se manca uno dei tre pezzi il
+link non si mostra e la vista dice quale manca. I pannelli non espongono gli
+stessi campi: 8TV+ non ha password (si accede con il codice, che coincide con lo
+username) e non ha un link, il VOD non ha codice di accesso. La vista privata è
+solo per l'owner; nel gruppo lo stesso contenuto si apre dal pulsante **Codici**
+della scheda cliente. Lo stesso link compare nel messaggio finale di `/nuovo`.
 
 ### Rinnovo
 
@@ -260,6 +265,11 @@ Regole:
   rivenditore, ma non può modificare nulla: prezzi, rinnovi e
   wizard restano in privato e richiedono l'identità personale (ID Telegram del
   rivenditore o dell'owner), non il gruppo;
+- la scheda cliente (`/start` → Cerca cliente, oppure `/cerca nome`) ha i
+  pulsanti **Scadenza**, **Codici** e **Rinnovo**; **Codici** mostra username,
+  password e link Live/VOD delle linee di quel cliente. Anche la lista
+  `/scadenze` ha **Apri** accanto a **Richiedi**, così la scheda si raggiunge
+  senza cercare;
 - `/richiedi` in gruppo risponde «ti ho scritto in privato» e manda la scelta
   della linea in chat diretta; la richiesta nasce con `origin_chat_id` del
   gruppo, così l'esito di approvazione o rifiuto viene annunciato anche lì;

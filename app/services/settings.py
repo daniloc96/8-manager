@@ -55,10 +55,15 @@ class SettingValueError(ValueError):
 
 
 EDITABLE_SETTINGS: dict[str, EditableSetting] = {
+    "live_domain": DomainSetting(
+        key="live_domain",
+        label="Dominio Live",
+        hint="Base del link Live consegnato al cliente (get.php); lo aggiorna anche il sync.",
+    ),
     "vod_domain": DomainSetting(
         key="vod_domain",
         label="Dominio VOD",
-        hint="Base del link VOD consegnato al cliente (get.php).",
+        hint="Base del link VOD consegnato al cliente (get.php); lo aggiorna anche il sync.",
     ),
 }
 

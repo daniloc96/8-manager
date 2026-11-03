@@ -27,6 +27,7 @@ from app.models import (
 )
 from app.panels.base import PanelAdapter
 from app.panels.base import PanelLine as PanelRow
+from app.services.downloads import save_domain
 from app.services.months import months_between
 from app.services.text import customer_search_key, normalize_key
 
@@ -68,6 +69,9 @@ class PlatformResult:
     renewals: int = 0
     historical: int = 0
     error: str | None = None
+    domain: str | None = None
+    domain_changed: bool = False
+    domain_error: str | None = None
     review: list[ReviewItem] = field(default_factory=list)
 
     def counts(self) -> dict[str, int]:
@@ -81,6 +85,7 @@ class PlatformResult:
             "expiry_updates": self.expiry_updates,
             "renewals": self.renewals,
             "historical": self.historical,
+            "domain_changed": int(self.domain_changed),
             "review": len(self.review),
         }
 
@@ -646,31 +651,65 @@ async def run_sync(
     )
     results = {adapter.platform: PlatformResult(platform=adapter.platform) for adapter in adapters}
 
-    fetched: list[tuple[PanelAdapter, list[PanelRow] | None, str | None]] = []
+    fetched: list[
+        tuple[PanelAdapter, list[PanelRow] | None, str | None, str | None, str | None]
+    ] = []
     for adapter in adapters:
+        rows: list[PanelRow] | None = None
+        error: str | None = None
+        domain: str | None = None
+        domain_error: str | None = None
         try:
             rows = await adapter.fetch_lines()
-            fetched.append((adapter, rows, None))
         except Exception as exc:  # un pannello rotto non deve fermare gli altri
             logger.exception("Sync %s fallito", adapter.platform.value)
-            fetched.append((adapter, None, _short_error(exc)))
-        finally:
+            error = _short_error(exc)
+        if rows is not None:
             try:
-                await adapter.aclose()
-            except Exception:
-                logger.warning("%s: chiusura client fallita", adapter.platform.value, exc_info=True)
+                domain = await adapter.fetch_download_domain()
+            except Exception as exc:
+                # Il dominio è un extra: la sync delle linee deve continuare.
+                logger.warning(
+                    "%s: dominio di download non letto",
+                    adapter.platform.value,
+                    exc_info=True,
+                )
+                domain_error = _short_error(exc)
+        fetched.append((adapter, rows, error, domain, domain_error))
+        try:
+            await adapter.aclose()
+        except Exception:
+            logger.warning("%s: chiusura client fallita", adapter.platform.value, exc_info=True)
 
     try:
         async with factory() as session:
             deleted_ids = set(
                 (await session.scalars(select(Line.id).where(Line.deleted_at.is_not(None)))).all()
             )
-            for adapter, rows, error in fetched:
+            for adapter, rows, error, domain, domain_error in fetched:
                 result = results[adapter.platform]
+                result.domain = domain
+                result.domain_error = domain_error
                 if rows is None:
                     result.status = SyncStatus.FAILED
                     result.error = error
                     continue
+
+                if domain:
+                    result.domain_changed = await save_domain(
+                        session, adapter.platform, domain, apply=not dry_run
+                    )
+                    if result.domain_changed and not dry_run:
+                        session.add(
+                            AuditLog(
+                                action="panel_domain",
+                                entity="setting",
+                                payload={
+                                    "platform": adapter.platform.value,
+                                    "domain": domain,
+                                },
+                            )
+                        )
 
                 result.fetched = len(rows)
                 upsert = await upsert_rows(session, adapter.platform, rows)
@@ -691,7 +730,11 @@ async def run_sync(
                             )
                         )
 
-            synced = [adapter.platform for adapter, rows, _error in fetched if rows is not None]
+            synced = [
+                adapter.platform
+                for adapter, rows, _error, _domain, _domain_error in fetched
+                if rows is not None
+            ]
             if synced:
                 link = await link_import_reconcile(
                     session,
@@ -727,7 +770,7 @@ async def run_sync(
                     result.status = SyncStatus.PARTIAL if result.review else SyncStatus.SUCCESS
 
             if not dry_run:
-                for adapter, _rows, _error in fetched:
+                for adapter, _rows, _error, _domain, _domain_error in fetched:
                     result = results[adapter.platform]
                     session.add(
                         SyncRun(

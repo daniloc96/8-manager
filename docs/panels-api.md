@@ -218,7 +218,7 @@ Il nome del pacchetto nel `text` contiene i mesi; `credits.before - after` è
 il costo. È la fonte per importare lo storico dei rinnovi. L'API pagina a 25
 righe anche se si chiede `perPage` più grande.
 
-### Link VOD
+### Link Live e VOD
 
 ```
 {download.base_url}/get.php?username={username}&password={password}&type=m3u_plus&output=mpegts
@@ -226,12 +226,16 @@ righe anche se si chiede `perPage` più grande.
 
 - `download.base_url` del VOD: `http://listavod.gostreet.org:24000`;
 - `download.base_url` del Live: `http://hulu.oldadventure.org:23000`;
-- il formato `m3u_plus` è quello usato dal pannello per il download.
+- il formato `m3u_plus` è quello usato dal pannello per il download;
+- la password è quella della riga del pannello: Live e VOD possono averla
+  diversa anche per lo stesso `username`.
 
 Il dominio è l'unica parte variabile: il suffisso si genera dalle credenziali
-della linea, non serve salvarlo per cliente. L'impostazione globale
-`vod_domain` può sovrascrivere `download.base_url` quando il provider cambia
-dominio.
+della linea. Il sync legge `data.download.base_url` da `/lines/meta` e lo salva
+in `settings` come `live_domain` e `vod_domain`: se il provider cambia host il
+valore si aggiorna alla sync successiva. Le due chiavi restano modificabili dal
+bot, ma la sync le riallinea al valore reale del pannello. 8Plus non espone un
+dominio di download: le sue linee ricevono solo il codice.
 
 ## Accoppiamento Live ↔ VOD
 

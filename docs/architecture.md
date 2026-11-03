@@ -90,9 +90,14 @@ L'import crea cliente e linea con prezzo `0` e nota "prezzo da impostare":
 la parte commerciale arriva dalla fase B. Gli orfani (VOD senza Live, note
 incompatibili, nomi mancanti) non vengono indovinati: finiscono nel report.
 
+Per LUCKY LIVE e VOD il sync legge anche `/lines/meta` e salva in `settings`
+`live_domain` e `vod_domain`: sono globali, cambiano solo se il provider cambia
+host, e servono a costruire i link della scheda con le credenziali della
+singola riga. 8Plus non espone un dominio di download.
+
 `sync_runs` registra una riga per piattaforma con i conteggi; `audit_log`
-registra import e correzioni di scadenza. Le sessioni HTTP sono in
-`/data/panel_sessions/` (600) e non stanno nel database.
+registra import, correzioni di scadenza e domini aggiornati. Le sessioni HTTP
+sono in `/data/panel_sessions/` (600) e non stanno nel database.
 
 ## Scelte rinviate
 

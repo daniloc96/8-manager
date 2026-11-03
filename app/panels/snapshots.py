@@ -25,6 +25,10 @@ class SnapshotAdapter:
     async def fetch_lines(self) -> list[PanelLine]:
         return list(self._rows)
 
+    async def fetch_download_domain(self) -> str | None:
+        # Gli snapshot della discovery non contengono /lines/meta.
+        return None
+
     async def aclose(self) -> None:
         return None
 

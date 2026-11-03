@@ -86,6 +86,10 @@ class EightPlusAdapter:
     async def aclose(self) -> None:
         await self._client.aclose()
 
+    async def fetch_download_domain(self) -> str | None:
+        """8Plus non espone un dominio di download: il cliente usa il codice."""
+        return None
+
     async def _ensure_auth(self) -> None:
         self._load_session()
         if self._access_token:

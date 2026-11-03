@@ -7,6 +7,7 @@ password la si mostra come assente, senza dedurla dal link VOD.
 from __future__ import annotations
 
 import logging
+from collections.abc import Mapping
 
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
 from telegram.constants import ParseMode
@@ -15,10 +16,10 @@ from telegram.ext import ContextTypes
 from app.bot import ui
 from app.bot.auth import access_for
 from app.db import session_scope
-from app.models import Platform
+from app.models import Line, Platform
+from app.services.downloads import load_domains
 from app.services.queries import customer_overview
-from app.services.settings import read_value
-from app.services.vod import vod_link
+from app.services.vod import download_link
 
 logger = logging.getLogger(__name__)
 
@@ -26,8 +27,13 @@ logger = logging.getLogger(__name__)
 MAX_LINES = 12
 MISSING = "—"
 
+LINK_LABELS = {
+    Platform.LIVE_HALLO: "link Live",
+    Platform.VOD_NEWVOD: "link VOD",
+}
 
-def _line_block(line, domain: str | None) -> list[str]:
+
+def _line_block(line: Line, domains: Mapping[Platform, str]) -> list[str]:
     parts = [f"<b>{ui.esc(ui.line_title(line))}</b>"]
     panels = sorted(line.panel_lines, key=lambda item: item.platform.value)
     if not panels:
@@ -50,17 +56,17 @@ def _line_block(line, domain: str | None) -> list[str]:
             fields.append(f"ID: <code>{ui.esc(panel.external_id)}</code>")
         if panel.expires_on:
             fields.append(f"scade sul pannello: {ui.italian_date(panel.expires_on)}")
-        # Il link di playlist ha senso solo per il VOD: è quello che si
-        # consegna al cliente.
-        if panel.platform == Platform.VOD_NEWVOD:
-            link = vod_link(domain, panel.username, panel.password)
+        # Live e VOD hanno ciascuno il proprio dominio e la propria password.
+        link_label = LINK_LABELS.get(panel.platform)
+        if link_label is not None:
+            link = download_link(domains.get(panel.platform), panel.username, panel.password)
             if link is not None:
-                fields.append(f"link VOD: <code>{ui.esc(link)}</code>")
-            elif not domain:
-                fields.append("<i>link VOD non disponibile: dominio non impostato</i>")
+                fields.append(f"{link_label}: <code>{ui.esc(link)}</code>")
+            elif not domains.get(panel.platform):
+                fields.append(f"<i>{link_label} non disponibile: dominio non impostato</i>")
             elif not panel.password:
-                fields.append("<i>link VOD non disponibile: manca la password</i>")
-        if not panel.password and panel.platform != Platform.VOD_NEWVOD:
+                fields.append(f"<i>{link_label} non disponibile: manca la password</i>")
+        if not panel.password and link_label is None:
             if panel.platform == Platform.LIVE_8TVPLUS:
                 fields.append("<i>nessuna password: sul pannello si accede con il codice</i>")
             else:
@@ -88,10 +94,10 @@ async def on_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
         if overview is None:
             await query.answer("Cliente non trovato.", show_alert=True)
             return
-        domain = await read_value(session, "vod_domain")
+        domains = await load_domains(session)
         lines = overview.lines[:MAX_LINES]
         hidden = len(overview.lines) - len(lines)
-        blocks = [_line_block(line, domain) for line in lines]
+        blocks = [_line_block(line, domains) for line in lines]
         name = overview.customer.name
 
     body = [f"🔑 <b>Codici · {ui.esc(name)}</b>", ""]

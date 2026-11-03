@@ -82,7 +82,8 @@ Nessuno stato pagato/non pagato: il totale è informativo.
 - `renewal_requests`: richieste dei rivenditori con stato e chat di origine.
 - `notifications`: deduplica dei reminder.
 - `audit_log`: modifiche manuali.
-- `settings`: valori modificabili dal bot (`vod_domain`).
+- `settings`: valori globali (`live_domain`, `vod_domain`), allineati dal sync
+  dai domini di download dei pannelli e modificabili dal bot.
 - `sync_runs`: esito dei sync dei pannelli.
 
 ## Calcolo dei mesi

@@ -56,6 +56,10 @@ class PanelAdapter(Protocol):
 
     async def fetch_lines(self) -> list[PanelLine]: ...
 
+    async def fetch_download_domain(self) -> str | None:
+        """Dominio pubblico da cui il pannello serve i link di download."""
+        ...
+
     async def aclose(self) -> None: ...
 
 

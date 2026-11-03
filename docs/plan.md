@@ -117,9 +117,10 @@ Bot (owner):
   prezzo, durata, ID pannello e codice di accesso. Alias, etichetta e dati
   tecnici si possono saltare con **Salta**; il blocco finale da copiare nel
   pannello riporta anche quello che è stato inserito;
-- **impostazioni modificabili**: `vod_domain` si cambia dal bot con
-  validazione (schema `http`/`https`, niente percorso né parametri). `-`
-  riporta la chiave al default di `.env`; un valore vuoto viene rifiutato;
+- **impostazioni modificabili**: `live_domain` e `vod_domain` si cambiano dal
+  bot con validazione (schema `http`/`https`, niente percorso né parametri) e
+  vengono riallineati dal sync. `-` riporta la chiave al default di `.env`; un
+  valore vuoto viene rifiutato;
 - **Riepilogo nel gruppo**: ogni gruppo collegato a un rivenditore riceve alle
   09:00 le scadenze dei prossimi `reminder_days` giorni (3), solo per le linee di
   quel rivenditore; se non c'è niente in scadenza **non parte**, e non ripete le
@@ -137,9 +138,10 @@ Bot (owner):
   linea, quindi il sync non lo sovrascrive;
 - **Vista Codici**: «🔑 Codici» dalla scheda cliente o dalla linea elenca per
   ogni pannello username, password, codice, ID e scadenza salvati dal sync. Per
-  il VOD aggiunge il link `get.php?...&type=m3u_plus&output=mpegts` costruito da
-  `vod_domain` + credenziali (stessa funzione usata da `/nuovo`). Solo owner.
-  8TV+ non ha password, il VOD non ha codice: la vista lo dice;
+  Live e VOD aggiunge il link `get.php?...&type=m3u_plus&output=mpegts`
+  costruito da `live_domain`/`vod_domain` + credenziali (stessa funzione usata
+  da `/nuovo` e dalla scheda linea). Solo owner.
+  8TV+ non ha password né link, il VOD non ha codice: la vista lo dice;
 - **«Non rinnova» dal reminder**: ogni linea in scadenza ha il pulsante
   **🚫 Non rinnova**, con conferma prima di scrivere. La marcatura non tocca
   il pannello: è un promemoria che resta nel reminder delle 09:00 (anche se la
@@ -176,16 +178,22 @@ In ordine di valore. Nessuna di queste è necessaria perché il bot funzioni
 oggi: sono rifiniture che riducono il lavoro manuale.
 
 1. **Fase F**: rinnovo/cancellazione via HTTP sui pannelli. Rinviata di
-   proposito: richiede gestione errori su sistemi non nostri. Gli adapter oggi
-   espongono solo `fetch_lines`: il bot legge e non scrive mai sui pannelli.
+   proposito: richiede gestione errori su sistemi non nostri. Gli adapter
+   espongono `fetch_lines` e `fetch_download_domain`: il bot legge e non scrive
+   mai sui pannelli.
 
-Nota sulla modifica anagrafica: il **link VOD** non è un campo salvato, si
-genera da `vod_domain` + username e password della linea (vedi
-`docs/panels-api.md`). Per questo non compare nel menu **Modifica**: cambia
-dominio, non cliente.
+Nota sulla modifica anagrafica: i **link Live/VOD** non sono campi salvati, si
+generano da `live_domain`/`vod_domain` + username e password della linea (vedi
+`docs/panels-api.md`). Per questo non compaiono nel menu **Modifica**: cambia
+dominio o credenziale, non cliente.
 
 ## Aggiunto il 2026-11-03
 
+- **Domini Live/VOD dal sync**: gli adapter leggono `data.download.base_url`
+  da `/lines/meta`; la sync salva `live_domain` e `vod_domain` in `settings` e
+  segnala nel report quando cambiano. La scheda linea e la vista Codici
+  costruiscono i due link con le credenziali della singola riga (password Live
+  e VOD possono essere diverse). 8Plus non ha un dominio: resta il codice.
 - **Reminder separati per gestione**: alle 09:00 l'owner riceve solo le linee
   dirette («⏰ Scadenze dirette»), i rivenditori le loro nel gruppo o in
   privato. Prima l'owner riceveva tutto il parco, comprese le scadenze dei

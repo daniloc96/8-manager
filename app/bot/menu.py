@@ -201,33 +201,15 @@ async def show_due(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
             body.append("")
             body.append("✅ Nessuna linea scaduta o in scadenza.")
 
-        if access.is_owner:
-            buttons = [
-                [
-                    InlineKeyboardButton(
-                        f"Rinnova {line.customer.name.split()[0]}",
-                        callback_data=f"renew:{line.id}:pick",
-                    ),
-                    InlineKeyboardButton("Apri", callback_data=f"card:{line.id}"),
-                ]
-                for line in (groups.today + groups.soon + groups.expired)[:10]
-            ]
-        else:
-            buttons = [
-                [
-                    InlineKeyboardButton(
-                        f"Richiedi · {line.customer.name.split()[0]}",
-                        callback_data=f"rq:{line.id}",
-                    )
-                ]
-                for line in (groups.today + groups.soon + groups.expired)[:10]
-            ]
-    buttons.append([InlineKeyboardButton("🏠 Menu", callback_data="menu:home")])
+        buttons = ui.due_keyboard(
+            (groups.today + groups.soon + groups.expired)[:10],
+            is_owner=access.is_owner,
+        )
 
     await target(
         "\n".join(body),
         parse_mode=ParseMode.HTML,
-        reply_markup=InlineKeyboardMarkup(buttons),
+        reply_markup=buttons,
     )
 
 

@@ -102,6 +102,24 @@ class LuckyAdapter:
         packages = container.get("packages") or []
         return [item for item in packages if isinstance(item, dict)]
 
+    async def fetch_download_domain(self) -> str | None:
+        """Legge `data.download.base_url` da /lines/meta.
+
+        Il dominio è globale per pannello: cambia solo quando il provider
+        cambia host, non per singola linea.
+        """
+        payload = await self._get(f"{API_PREFIX}/lines/meta")
+        data = payload.get("data")
+        if not isinstance(data, dict):
+            return None
+        download = data.get("download")
+        if not isinstance(download, dict):
+            return None
+        base_url = _text(download.get("base_url"))
+        if not base_url:
+            return None
+        return base_url.rstrip("/")
+
     async def aclose(self) -> None:
         await self._client.aclose()
 
