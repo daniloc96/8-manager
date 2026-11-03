@@ -97,6 +97,8 @@ def test_every_callback_matches_exactly_one_handler(monkeypatch) -> None:
         "gdue:5",
         "gcod:5",
         "grenew:5",
+        "gpage:2",
+        "gpage:noop",
         "greq:12",
         "greqm:12:3",
         "greqy:12:3",

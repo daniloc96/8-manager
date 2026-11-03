@@ -135,6 +135,7 @@ def build_application() -> Application:
     application.add_handler(
         CallbackQueryHandler(group_menu.on_callback, pattern=r"^(gmenu|gcard|gdue|gcod|grenew):")
     )
+    application.add_handler(CallbackQueryHandler(group_menu.on_page, pattern=r"^gpage:"))
     application.add_handler(CallbackQueryHandler(group_request.ask, pattern=r"^greq:"))
     application.add_handler(CallbackQueryHandler(group_request.pick_months, pattern=r"^greqm:"))
     application.add_handler(CallbackQueryHandler(group_request.confirm, pattern=r"^greqy:"))

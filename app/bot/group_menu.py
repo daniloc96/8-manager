@@ -29,7 +29,12 @@ from app.services.queries import (
 logger = logging.getLogger(__name__)
 
 MAX_LINES = 12
-MAX_RESULTS = 10
+PAGE_SIZE = 8
+_MAX_RESULTS = 10
+# Risultati in attesa di paginazione, per messaggio: la lista dei nomi non sta
+# nel callback_data (64 byte) e non serve tenerla nel DB per qualche minuto.
+_RESULTS_CACHE: dict[tuple[int, int], tuple[str, list[tuple[int, str]]]] = {}
+_RESULTS_CACHE_LIMIT = 512
 SEARCH_HINT = "gsearch"
 
 
@@ -407,7 +412,8 @@ async def search_in_group(update: Update, context: ContextTypes.DEFAULT_TYPE, te
     """Ricerca nel gruppo: solo le linee del rivenditore collegato alla chat.
 
     Un pulsante per cliente, niente elenco di testo: con molti clienti una lista
-    lunga si legge male, e il pulsante è già il «vai a quello lì».
+    lunga si legge male, e il pulsante è già il «vai a quello lì». Oltre una
+    pagina i risultati si sfogliano con ◀️ ▶️, riscrivendo la stessa pulsantiera.
 
     Usata sia dal pulsante «Cerca cliente» (testo libero) sia da `/cerca nome`,
     che funziona anche con la privacy dei bot attiva.
@@ -423,7 +429,7 @@ async def search_in_group(update: Update, context: ContextTypes.DEFAULT_TYPE, te
             await message.reply_html("Questo gruppo non è collegato a un rivenditore.")
             return
         reseller_id, _name = found
-        lines = await search_lines(session, text, reseller_id=reseller_id, limit=60)
+        lines = await search_lines(session, text, reseller_id=reseller_id, limit=200)
 
     grouped: dict[int, list] = {}
     for line in lines:
@@ -435,16 +441,100 @@ async def search_in_group(update: Update, context: ContextTypes.DEFAULT_TYPE, te
         )
         return
 
-    buttons = []
-    for customer_id, customer_lines in list(grouped.items())[:MAX_RESULTS]:
+    entries: list[tuple[int, str]] = []
+    for customer_id, customer_lines in grouped.items():
         label = customer_lines[0].customer.name
         if len(customer_lines) > 1:
             label = f"{label} · {len(customer_lines)}"
-        buttons.append([InlineKeyboardButton(label[:60], callback_data=f"gcard:{customer_id}")])
-    buttons.append([InlineKeyboardButton("🔎 Cerca di nuovo", callback_data="gmenu:search")])
-    buttons.append([InlineKeyboardButton("🏠 Menu", callback_data="gmenu:home")])
-    found_word = "cliente trovato" if len(grouped) == 1 else "clienti trovati"
-    await message.reply_html(
-        f"🔎 <b>Chi è {ui.esc(text)}?</b>\n\n{len(grouped)} {found_word}: premi il nome.",
-        reply_markup=InlineKeyboardMarkup(buttons),
+        entries.append((customer_id, label))
+
+    sent = await message.reply_html(
+        _results_text(text, len(entries), 0),
+        reply_markup=_results_keyboard(entries, 0),
+    )
+    _remember_results(chat.id, sent, text, entries)
+
+
+def _pages(total: int) -> int:
+    return max(1, (total + PAGE_SIZE - 1) // PAGE_SIZE)
+
+
+def _results_text(query: str, total: int, page: int) -> str:
+    found_word = "cliente trovato" if total == 1 else "clienti trovati"
+    pages = _pages(total)
+    where = "" if pages == 1 else f" · pagina {page + 1}/{pages}"
+    return f"🔎 <b>Chi è {ui.esc(query)}?</b>\n\n{total} {found_word}{where}: premi il nome."
+
+
+def _results_keyboard(entries: list[tuple[int, str]], page: int) -> InlineKeyboardMarkup:
+    pages = _pages(len(entries))
+    page = max(0, min(page, pages - 1))
+    start = page * PAGE_SIZE
+    rows = [
+        [InlineKeyboardButton(label[:60], callback_data=f"gcard:{customer_id}")]
+        for customer_id, label in entries[start : start + PAGE_SIZE]
+    ]
+    if pages > 1:
+        nav = []
+        if page > 0:
+            nav.append(InlineKeyboardButton("◀️", callback_data=f"gpage:{page - 1}"))
+        nav.append(InlineKeyboardButton(f"{page + 1}/{pages}", callback_data="gpage:noop"))
+        if page < pages - 1:
+            nav.append(InlineKeyboardButton("▶️", callback_data=f"gpage:{page + 1}"))
+        rows.append(nav)
+    rows.append([InlineKeyboardButton("🔎 Cerca di nuovo", callback_data="gmenu:search")])
+    rows.append([InlineKeyboardButton("🏠 Menu", callback_data="gmenu:home")])
+    return InlineKeyboardMarkup(rows)
+
+
+def _remember_results(chat_id: int, sent, query: str, entries: list[tuple[int, str]]) -> None:
+    """Tiene i risultati per la paginazione, legati al messaggio inviato.
+
+    Se il processo si riavvia la cache sparisce: la pagina successiva lo dice e
+    invita a cercare di nuovo, invece di mostrare risultati sbagliati.
+    """
+    message_id = getattr(sent, "message_id", None)
+    if message_id is None:
+        return
+    if len(_RESULTS_CACHE) >= _RESULTS_CACHE_LIMIT:
+        _RESULTS_CACHE.pop(next(iter(_RESULTS_CACHE)), None)
+    _RESULTS_CACHE[(chat_id, message_id)] = (query, entries)
+
+
+async def on_page(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """◀️ ▶️: riscrive lo stesso messaggio con la pagina richiesta."""
+    query = update.callback_query
+    chat = update.effective_chat
+    message = update.effective_message
+    if query is None or query.data is None or chat is None or message is None:
+        return
+    await query.answer()
+
+    data = query.data
+    if data == "gpage:noop":
+        return
+    _, _, raw = data.partition(":")
+    if not raw.isdigit():
+        return
+    page = int(raw)
+
+    message_id = getattr(message, "message_id", None)
+    stored = _RESULTS_CACHE.get((chat.id, message_id))
+    if stored is None:
+        await ui.Editor(query).edit_text(
+            "La ricerca è scaduta: cercala di nuovo.", reply_markup=_back()
+        )
+        return
+    search_text, entries = stored
+
+    async with session_scope() as session:
+        found = await _reseller_of_chat(update, session)
+    if found is None:
+        await ui.Editor(query).edit_text("Questo gruppo non è più collegato a un rivenditore.")
+        return
+
+    await ui.Editor(query).edit_text(
+        _results_text(search_text, len(entries), page),
+        parse_mode=ParseMode.HTML,
+        reply_markup=_results_keyboard(entries, page),
     )

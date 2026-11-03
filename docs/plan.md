@@ -127,8 +127,9 @@ Bot (owner):
   periodo tra i preset e solo dopo la conferma la richiesta parte e l'owner viene
   avvisato (`greq` → `greqm` → `greqy`). In gruppo `/start` apre una pulsantiera
   (scadenze, rinnovo, cerca cliente, aiuto) al posto dei comandi testuali; ogni
-  risultato di ricerca ha «Dettagli» e «Rinnovo», sempre del solo rivenditore
-  collegato alla chat.
+  risultato di ricerca ha «Scadenza», «Codici» e «Rinnovo», sempre del solo
+  rivenditore collegato alla chat; i risultati sono paginati 8 per pagina con
+  ◀️ ▶️.
 - **Rivenditore da bot**: dalla scheda cliente «🏷 Rivenditore» sposta tutte le
   linee attive su un rivenditore o le riporta a «Diretto», con audit per linea;
   la stessa voce è nel menu **Modifica** della singola linea. Il campo vive sulla

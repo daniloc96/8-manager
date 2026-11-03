@@ -38,9 +38,10 @@ def bot_session_factory(engine, monkeypatch):
 
 
 class FakeMessage:
-    def __init__(self, text: str | None = None) -> None:
+    def __init__(self, text: str | None = None, message_id: int = 700) -> None:
         self.sent: list[tuple[str, object]] = []
         self.text = text
+        self.message_id = message_id
 
     async def reply_html(self, text, **kwargs):
         if "parse_mode" in kwargs:
@@ -50,11 +51,11 @@ class FakeMessage:
 
 
 class FakeQuery:
-    def __init__(self, data: str) -> None:
+    def __init__(self, data: str, message_id: int = 700) -> None:
         self.data = data
         self.edits: list[str] = []
         self.markup = None
-        self.message = SimpleNamespace(message_id=1)
+        self.message = SimpleNamespace(message_id=message_id)
 
     async def answer(self, **_kwargs):
         return None
@@ -74,12 +75,12 @@ def start_update(chat):
     )
 
 
-def callback_update(data: str, chat):
+def callback_update(data: str, chat, message_id: int = 700):
     return SimpleNamespace(
-        callback_query=FakeQuery(data),
+        callback_query=FakeQuery(data, message_id=message_id),
         effective_user=SimpleNamespace(id=7771, first_name="Mario", full_name="Mario Rossi"),
         effective_chat=chat,
-        effective_message=SimpleNamespace(chat=chat),
+        effective_message=SimpleNamespace(chat=chat, message_id=message_id),
     )
 
 
@@ -330,6 +331,99 @@ async def test_cerca_command_without_name_says_how_to_use_it(session, bot_sessio
 
     body, _markup = update.effective_message.sent[-1]
     assert "/cerca nome del cliente" in body
+
+
+async def _many_customers(session, count: int) -> list[int]:
+    today = date.today()
+    reseller = Reseller(
+        name="Mario",
+        name_key="mario",
+        group_chat_id=GROUP_ID,
+        active=True,
+        notify=True,
+    )
+    session.add(reseller)
+    await session.flush()
+    ids = []
+    for index in range(count):
+        name = f"Cliente {index + 1:02d}"
+        customer = Customer(name=name, search_key=customer_search_key(name))
+        session.add(customer)
+        await session.flush()
+        session.add(
+            Line(
+                customer=customer,
+                service=Service.LIVE,
+                monthly_price_cents=500,
+                started_on=date(2025, 1, 1),
+                expires_on=today + timedelta(days=index),
+                anchor_day=1,
+                reseller_id=reseller.id,
+            )
+        )
+        ids.append(customer.id)
+    await session.commit()
+    return ids
+
+
+async def test_search_results_are_paginated(session, bot_session_factory) -> None:
+    ids = await _many_customers(session, 15)
+    typed = text_update("cliente", GROUP)
+
+    await group_menu.handle_text(typed, SimpleNamespace(user_data={"awaiting": "gsearch"}))
+
+    body, markup = typed.effective_message.sent[-1]
+    assert "15 clienti trovati" in body
+    assert "pagina 1/2" in body
+    labels = [b.text for row in markup.inline_keyboard for b in row]
+    callbacks = _callbacks(markup)
+    name_buttons = [c for c in callbacks if c.startswith("gcard:")]
+    assert name_buttons == [f"gcard:{cid}" for cid in ids[:8]], "prima pagina da 8"
+    assert "1/2" in labels
+    assert "▶️" in labels and "◀️" not in labels
+
+
+async def test_paging_moves_to_the_next_page_in_the_same_message(
+    session, bot_session_factory
+) -> None:
+    ids = await _many_customers(session, 15)
+    typed = text_update("cliente", GROUP)
+    await group_menu.handle_text(typed, SimpleNamespace(user_data={"awaiting": "gsearch"}))
+
+    update = callback_update("gpage:1", GROUP)
+    await group_menu.on_page(update, SimpleNamespace(user_data={}))
+
+    body = update.callback_query.edits[-1]
+    assert "pagina 2/2" in body
+    callbacks = _callbacks(update.callback_query.markup)
+    assert [c for c in callbacks if c.startswith("gcard:")] == [f"gcard:{cid}" for cid in ids[8:]]
+    labels = [b.text for row in update.callback_query.markup.inline_keyboard for b in row]
+    assert "◀️" in labels and "▶️" not in labels
+
+
+async def test_paging_back_returns_to_the_first_page(session, bot_session_factory) -> None:
+    await _many_customers(session, 15)
+    typed = text_update("cliente", GROUP)
+    await group_menu.handle_text(typed, SimpleNamespace(user_data={"awaiting": "gsearch"}))
+
+    await group_menu.on_page(callback_update("gpage:1", GROUP), SimpleNamespace(user_data={}))
+    back = callback_update("gpage:0", GROUP)
+    await group_menu.on_page(back, SimpleNamespace(user_data={}))
+
+    assert "pagina 1/2" in back.callback_query.edits[-1]
+    labels = [b.text for row in back.callback_query.markup.inline_keyboard for b in row]
+    assert "▶️" in labels and "◀️" not in labels
+
+
+async def test_paging_without_cached_results_asks_to_search_again(
+    session, bot_session_factory
+) -> None:
+    await _many_customers(session, 3)
+    update = callback_update("gpage:1", GROUP, message_id=999_999)
+
+    await group_menu.on_page(update, SimpleNamespace(user_data={}))
+
+    assert "scaduta" in update.callback_query.edits[-1]
 
 
 async def test_card_shows_actions_for_the_customer(session, bot_session_factory) -> None:
