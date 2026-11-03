@@ -251,6 +251,17 @@ async def test_income_report_includes_portfolio_value(session) -> None:
     assert report.total_cents == 0
 
 
+async def test_portfolio_counts_customers_not_channels(session) -> None:
+    """Un cliente con Live e VOD non vale doppio: conta una volta sola."""
+    await _seed(session)
+
+    report = await income_report(session, 2026, 11)
+
+    assert report.active_lines == 4
+    assert report.active_customers == 2, "due clienti, quattro linee"
+    assert report.monthly_cents == 2000
+
+
 async def test_income_report_portfolio_survives_empty_month(session) -> None:
     await _seed(session)
 

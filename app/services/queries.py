@@ -42,6 +42,9 @@ class IncomeReport:
     # dai rinnovi del mese, serve solo a leggere la dimensione del giro.
     active_lines: int = 0
     monthly_cents: int = 0
+    # Clienti distinti dietro quelle linee: alcuni hanno Live e VOD, o due
+    # linee, ma il guadagno non si conta due volte per lo stesso cliente.
+    active_customers: int = 0
 
 
 async def active_lines(session: AsyncSession) -> list[Line]:
@@ -243,6 +246,7 @@ async def income_report(session: AsyncSession, year: int, month: int) -> IncomeR
 
     portfolio = await active_lines(session)
     report.active_lines = len(portfolio)
+    report.active_customers = len({line.customer_id for line in portfolio})
     report.monthly_cents = sum(line.monthly_price_cents for line in portfolio)
     return report
 

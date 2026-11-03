@@ -109,7 +109,7 @@ async def test_approve_request_registers_renewal(session) -> None:
         session, line_id=mine.id, requested_by=777, months=2, note="rinnovo standard"
     )
 
-    approved, line = await approve_request(
+    approved, line, renewal = await approve_request(
         session, request_id=request.id, months=3, today=TODAY, approved_by=OWNER_ID
     )
 
@@ -121,6 +121,7 @@ async def test_approve_request_registers_renewal(session) -> None:
     renewals = list((await session.scalars(select(Renewal))).all())
     assert len(renewals) == 1
     assert renewals[0].total_cents == 1500
+    assert renewal.total_cents == 1500, "il rinnovo torna al chiamante per l'importo"
     assert renewals[0].note == "rinnovo standard"
     assert await pending_requests(session) == []
 

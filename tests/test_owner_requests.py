@@ -300,6 +300,10 @@ async def test_approve_is_announced_in_the_group(session, bot_session_factory) -
     group_text = next(text for chat_id, text, _m in bot.sent if chat_id == GROUP_ID)
     assert "Rinnovo approvato" in group_text
     assert "2 mesi" in group_text
+    # Il rivenditore deve vedere quanto è stato incassato.
+    assert "Importo: <b>10,00 €</b>" in group_text
+    private_text = next(text for chat_id, text, _m in bot.sent if chat_id == 777)
+    assert "Importo: <b>10,00 €</b>" in private_text
 
 
 async def test_private_request_gets_a_private_answer(session, bot_session_factory) -> None:

@@ -314,3 +314,17 @@ sistemare, con le due date a confronto e due scelte:
 
 Le anomalie senza linea (per esempio un username doppio nel pannello) restano
 solo nel messaggio del sync: non c'è una linea su cui agire dal bot.
+
+## Come si conta il guadagno
+
+Due numeri diversi, e non vanno confusi:
+
+- **Incassi del mese** — la somma dei rinnovi registrati nel mese, per
+  rivenditore. È il denaro entrato.
+- **Parco** — il giro mensile: somma di `monthly_price_cents` delle linee attive,
+  con clienti distinti e linee attive a confronto. Un cliente con Live e VOD ha
+  una sola linea di incasso: il prezzo è del cliente, non del canale, quindi il
+  totale non raddoppia.
+
+Il messaggio di approvazione del rinnovo riporta l'importo (`mesi × prezzo
+mensile`) sia all'owner sia al rivenditore, nel privato e nel gruppo.

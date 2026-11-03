@@ -264,9 +264,14 @@ async def show_income(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
 
     body.append("")
     body.append(
-        f"📦 Parco: <b>{report.active_lines} linee attive</b> · "
-        f"{format_eur(report.monthly_cents)}/mese"
+        f"📦 Parco: <b>{report.active_customers} clienti</b> · "
+        f"{report.active_lines} linee attive · {format_eur(report.monthly_cents)}/mese"
     )
+    if report.active_lines != report.active_customers:
+        body.append(
+            "<i>Un cliente con Live e VOD è una sola linea di incasso: i due "
+            "canali non si sommano a parte.</i>"
+        )
 
     await target(
         "\n".join(body),

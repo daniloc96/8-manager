@@ -7,6 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models import (
     Line,
+    Renewal,
     RenewalRequest,
     RenewalSource,
     RequestStatus,
@@ -71,7 +72,7 @@ async def approve_request(
     months: int,
     today: date,
     approved_by: int | None,
-) -> tuple[RenewalRequest, Line]:
+) -> tuple[RenewalRequest, Line, Renewal]:
     request = await session.get(RenewalRequest, request_id)
     if request is None or request.status is not RequestStatus.PENDING:
         raise RequestError("richiesta non trovata o già gestita")
@@ -97,7 +98,7 @@ async def approve_request(
     request.resolved_at = utcnow()
     request.resolved_by_telegram_id = approved_by
     await session.flush()
-    return request, line
+    return request, line, renewal
 
 
 async def reject_request(

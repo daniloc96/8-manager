@@ -267,7 +267,7 @@ async def approve(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
             await query.answer("Solo l'owner può approvare.", show_alert=True)
             return
         try:
-            request, line = await approve_request(
+            request, line, renewal = await approve_request(
                 session,
                 request_id=request_id,
                 months=months,
@@ -279,13 +279,15 @@ async def approve(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
             return
         title = ui.line_title(line)
         expires = line.expires_on
+        amount = renewal.total_cents
         requester = request.requested_by_telegram_id
         origin = request.origin_chat_id
 
     await query.answer("Rinnovo registrato")
     await query.edit_message_text(
         f"✅ <b>Rinnovo approvato</b>\n\n{ui.esc(title)}\n"
-        f"{months} {_period(months)} · nuova scadenza {ui.italian_date(expires)}",
+        f"{months} {_period(months)} · nuova scadenza {ui.italian_date(expires)}\n"
+        f"Importo: <b>{format_eur(amount)}</b>",
         parse_mode=ParseMode.HTML,
     )
 
@@ -295,7 +297,8 @@ async def approve(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         text=(
             "✅ <b>Rinnovo approvato</b>\n\n"
             f"{ui.esc(title)}\n{months} {_period(months)} · "
-            f"nuova scadenza {ui.italian_date(expires)}"
+            f"nuova scadenza {ui.italian_date(expires)}\n"
+            f"Importo: <b>{format_eur(amount)}</b>"
         ),
         requester=requester,
         origin=origin,
