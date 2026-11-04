@@ -294,7 +294,9 @@ NOTE: Mario amico di Luca
 ```
 
 Si copia e si incolla nel pannello; la linea resta «da creare nel pannello»
-finché il sync non trova l'ID. **Rifiuta** chiude la richiesta senza creare
+finché il sync non trova l'ID. Non serve `/sync importa`: il sync normale
+riconosce l'ID della richiesta e collega la riga alla linea già creata, senza
+duplicare cliente e linea. **Rifiuta** chiude la richiesta senza creare
 niente. L'esito (conferma o rifiuto) torna nel gruppo o nel privato da cui è
 partita la richiesta. `/richieste` elenca sia i rinnovi sia le nuove linee in
 attesa.
