@@ -308,7 +308,9 @@ VOD
 Se il pannello non è ancora completo, l'owner non riceve un messaggio al
 gruppo: il bot gli mostra il blocco da creare e il pulsante **🔄 Sincronizza e
 avvisa**. Premuto dopo aver completato il pannello, rifà la sync e manda i
-codici. **Rifiuta** chiude la richiesta senza creare niente. L'esito (conferma
+codici. Lo stesso succede con un `/sync` manuale: le richieste già confermate
+e non ancora annunciate ricevono i codici appena il pannello è completo.
+**Rifiuta** chiude la richiesta senza creare niente. L'esito (conferma
 o rifiuto) torna nel gruppo o nel privato da cui è partita la richiesta.
 `/richieste` elenca sia i rinnovi sia le nuove linee in attesa.
 

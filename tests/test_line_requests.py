@@ -559,6 +559,33 @@ async def test_group_wizard_keeps_the_origin_and_tells_the_owner(
     assert owner_messages and "chiede una nuova linea" in owner_messages[0]
 
 
+async def test_sync_flush_sends_pending_codes_once(session, bot_session_factory) -> None:
+    """Anche un `/sync` manuale chiude il giro di una richiesta già confermata."""
+    reseller_row = await _seed(session, with_group=False)
+    request = await _request(session, reseller_row)
+    _approved, _customer, line, _username = await approve_new_line_request(
+        session,
+        request_id=request.id,
+        price_cents=700,
+        approved_by=OWNER_ID,
+        today=date(2026, 11, 4),
+    )
+    await session.commit()
+    await _add_panels(
+        bot_session_factory,
+        line_id=line.id,
+        username=request.username,
+        note=request.note,
+        expires_on=date(2027, 2, 4),
+    )
+    ctx = context()
+
+    assert await line_request.announce_ready_requests(ctx) == 1
+    assert ctx.bot.sent[-1][0] == PRIVATE.id
+    assert "link Live" in ctx.bot.sent[-1][1]
+    assert await line_request.announce_ready_requests(ctx) == 0
+
+
 # --- elenco owner -----------------------------------------------------------
 
 

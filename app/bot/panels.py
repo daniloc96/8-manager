@@ -52,6 +52,9 @@ async def sync_panels(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
     report = await run_sync(adapters, import_missing=import_missing, skipped=skipped)
     async with session_scope() as session:
         await store_reviews(session, report)
+    from app.bot.line_request import announce_ready_requests
+
+    await announce_ready_requests(context)
     body = report_html(report)
     try:
         await notice.edit_text(body, parse_mode=ParseMode.HTML)

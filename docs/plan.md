@@ -225,8 +225,9 @@ dominio o credenziale, non cliente.
   il bot esegue una **sync completa**: aggancia la riga del pannello all'ID
   congelato e manda al gruppo i codici veri (username, password, codice) e i
   link Live/VOD. Se il pannello non è ancora completo, non manda niente al
-  gruppo e offre «🔄 Sincronizza e avvisa». Migrazioni `c3f4d2a19b60` e
-  `d9e1a7c4b2f0`, 18 test nuovi.
+  gruppo e offre «🔄 Sincronizza e avvisa». Anche un `/sync` manuale manda i
+  codici delle richieste approvate che nel frattempo sono comparse nel pannello.
+  Migrazioni `c3f4d2a19b60` e `d9e1a7c4b2f0`, 19 test nuovi.
 
 ## Corretto il 2026-11-03
 
@@ -274,7 +275,7 @@ Debito tecnico noto:
 ```bash
 uv sync                                  # dipendenze
 uv run ruff check . && uv run ruff format --check .
-uv run pytest -q                         # 353 test al 2026-11-04
+uv run pytest -q                         # 354 test al 2026-11-04
 ./scripts/deploy.sh --apply              # produzione
 ./scripts/verify.sh
 ```

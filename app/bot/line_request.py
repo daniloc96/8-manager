@@ -15,6 +15,7 @@ import logging
 from datetime import datetime
 from zoneinfo import ZoneInfo
 
+from sqlalchemy import select
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
 from telegram.constants import ParseMode
 from telegram.ext import ContextTypes
@@ -687,12 +688,21 @@ async def _finish(context: ContextTypes.DEFAULT_TYPE, *, payload: dict, editing:
 
     details = await _panel_details(payload)
     if details is not None and not details["missing"]:
-        await editing.edit_text(
-            details["text"],
-            parse_mode=ParseMode.HTML,
-            reply_markup=InlineKeyboardMarkup([]),
-        )
-        await _send_to_origin(context, payload=payload, text=details["text"])
+        delivered = await _send_to_origin(context, payload=payload, text=details["text"])
+        if delivered:
+            await editing.edit_text(
+                details["text"],
+                parse_mode=ParseMode.HTML,
+                reply_markup=InlineKeyboardMarkup([]),
+            )
+        else:
+            await editing.edit_text(
+                f"{details['text']}\n\n"
+                "<i>Non riesco a scrivere nel gruppo: premi "
+                "«🔄 Sincronizza e avvisa» per riprovare.</i>",
+                parse_mode=ParseMode.HTML,
+                reply_markup=_retry_keyboard(payload["request_id"]),
+            )
         return
 
     missing = details["missing"] if details is not None else _expected_platforms(payload["service"])
@@ -728,25 +738,10 @@ async def _retry(
         ):
             await editing.edit_text("Richiesta non trovata o non ancora confermata.")
             return
-        line = await get_line(session, request.line_id)
-        if line is None:
+        payload = await _payload_for(session, request)
+        if payload is None:
             await editing.edit_text("La linea non esiste più.")
             return
-        reseller = await session.get(Reseller, request.reseller_id)
-        payload = {
-            "request_id": request.id,
-            "line_id": line.id,
-            "name": line.customer.name,
-            "reseller_name": reseller.name if reseller is not None else "—",
-            "service": request.service,
-            "months": request.months,
-            "username": request.username,
-            "note": request.note,
-            "price_cents": line.monthly_price_cents,
-            "expires_on": line.expires_on,
-            "origin_chat_id": request.origin_chat_id,
-            "requested_by": request.requested_by_telegram_id,
-        }
 
     await editing.edit_text(
         "⏳ Sincronizzo i pannelli…",
@@ -801,16 +796,18 @@ def _retry_keyboard(request_id: int) -> InlineKeyboardMarkup:
     )
 
 
-async def _send_to_origin(context: ContextTypes.DEFAULT_TYPE, *, payload: dict, text: str) -> None:
-    """Manda i codici al gruppo (o al privato) una volta sola."""
+async def _send_to_origin(context: ContextTypes.DEFAULT_TYPE, *, payload: dict, text: str) -> bool:
+    """Manda i codici al gruppo (o al privato) una volta sola. False = non inviato."""
     async with session_scope() as session:
         request = await session.get(NewLineRequest, payload["request_id"])
-        if request is None or request.announced_at is not None:
-            return
+        if request is None:
+            return False
+        if request.announced_at is not None:
+            return True
 
     target = payload["origin_chat_id"] or payload["requested_by"]
     if target is None or context.bot is None:
-        return
+        return False
     try:
         await context.bot.send_message(
             chat_id=target,
@@ -819,12 +816,72 @@ async def _send_to_origin(context: ContextTypes.DEFAULT_TYPE, *, payload: dict, 
         )
     except Exception:
         logger.warning("Nuova linea: esito non consegnato a %s", target)
-        return
+        return False
 
     async with session_scope() as session:
         request = await session.get(NewLineRequest, payload["request_id"])
         if request is not None:
             request.announced_at = utcnow()
+    return True
+
+
+async def _payload_for(session, request: NewLineRequest) -> dict | None:
+    if request.line_id is None:
+        return None
+    line = await get_line(session, request.line_id)
+    if line is None:
+        return None
+    reseller = await session.get(Reseller, request.reseller_id)
+    return {
+        "request_id": request.id,
+        "line_id": line.id,
+        "name": line.customer.name,
+        "reseller_name": reseller.name if reseller is not None else "—",
+        "service": request.service,
+        "months": request.months,
+        "username": request.username,
+        "note": request.note,
+        "price_cents": line.monthly_price_cents,
+        "expires_on": line.expires_on,
+        "origin_chat_id": request.origin_chat_id,
+        "requested_by": request.requested_by_telegram_id,
+    }
+
+
+async def announce_ready_requests(context: ContextTypes.DEFAULT_TYPE) -> int:
+    """Manda i codici delle richieste approvate che il pannello ha completato.
+
+    Serve al `/sync` manuale: se l'owner ha creato la linea dopo la conferma,
+    la sync la aggancia e questo chiude il giro senza dover riaprire il bot.
+    """
+    async with session_scope() as session:
+        ids = list(
+            (
+                await session.scalars(
+                    select(NewLineRequest.id).where(
+                        NewLineRequest.status == RequestStatus.APPROVED,
+                        NewLineRequest.line_id.is_not(None),
+                        NewLineRequest.announced_at.is_(None),
+                    )
+                )
+            ).all()
+        )
+
+    sent = 0
+    for request_id in ids:
+        async with session_scope() as session:
+            request = await session.get(NewLineRequest, request_id)
+            if request is None or request.announced_at is not None:
+                continue
+            payload = await _payload_for(session, request)
+        if payload is None:
+            continue
+        details = await _panel_details(payload)
+        if details is None or details["missing"]:
+            continue
+        if await _send_to_origin(context, payload=payload, text=details["text"]):
+            sent += 1
+    return sent
 
 
 async def _reject(
