@@ -1,6 +1,6 @@
 # Piano di lavoro — 8-manager
 
-Ultimo aggiornamento: **2026-11-03**.
+Ultimo aggiornamento: **2026-11-04**.
 Questo file è il punto di partenza per chi riprende il lavoro: stato reale,
 decisioni già prese, cosa manca e come si mette in produzione una modifica.
 
@@ -29,7 +29,7 @@ allineate ai rispettivi remoti.
 | Bot | `@l7_manager_bot`, polling, nessuna porta pubblica |
 | DB | `/data/8manager.sqlite3` (SQLite WAL), backup in `/data/backups` |
 | Job | heartbeat 60 s · reminder 09:00 · backup 03:15 (Europe/Rome) |
-| Ultimo deploy | `21d439c` · 2026-11-03T17:10Z · schema `a7c53d9e21b4` · 318 test · CI verde |
+| Ultimo deploy | `5120f39` · 2026-11-04T19:05Z · schema `c3f4d2a19b60` · 351 test · CI verde |
 
 ```bash
 ./scripts/deploy.sh            # dry-run
