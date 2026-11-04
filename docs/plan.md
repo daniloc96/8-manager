@@ -113,6 +113,11 @@ Bot (owner):
   `/scollega`; nel gruppo solo comandi indirizzati, letture sì e modifiche no;
 - `/richiedi` rivenditore: richiesta in privato, approvazione owner con la
   durata scelta, conferma al rivenditore e nel gruppo di origine;
+- **richiesta di nuova linea** (rivenditore, privato o gruppo): nome, mesi,
+  servizio e nota; l'ID si congela alla richiesta (`nome` + `GGMMAA`) e l'owner
+  conferma scegliendo il prezzo. Alla conferma nascono cliente nuovo e linea e
+  il bot mostra il blocco monospace da copiare nel pannello (servizio, ID,
+  password, durata, note). `/richieste` elenca rinnovi e nuove linee;
 - **wizard `/nuovo` completo**: nome, alias, servizio, rivenditore, etichetta,
   prezzo, durata, ID pannello e codice di accesso. Alias, etichetta e dati
   tecnici si possono saltare con **Salta**; il blocco finale da copiare nel
@@ -207,6 +212,19 @@ dominio o credenziale, non cliente.
   fino alla data locale. Caso coperto per primo: **data locale più avanti di
   quella del pannello**. Migrazione `a7c53d9e21b4`.
 
+## Aggiunto il 2026-11-04
+
+- **Richiesta di nuova linea dal rivenditore**, dal privato e dal gruppo. Il
+  wizard chiede nome, mesi, Live/Live + VOD e una nota; l'ID si genera alla
+  richiesta (nome + giorno/mese/anno a due cifre) e non cambia se l'owner
+  conferma dopo. L'owner riceve «Il rivenditore … chiede una nuova linea», può
+  rifiutare oppure confermare scegliendo il prezzo. Alla conferma nascono un
+  cliente nuovo e la linea; il messaggio finale contiene un unico blocco
+  monospace con servizio, ID, password, durata e note, da copiare identico nel
+  pannello. Migrazione `c3f4d2a19b60`, 16 test nuovi. Il `/sync` collega la
+  riga del pannello alla linea della richiesta tramite l'ID congelato, senza
+  duplicare cliente e linea.
+
 ## Corretto il 2026-11-03
 
 - **Richiesta dal canale e rinnovo da bottone: `AttributeError: 'CallbackQuery'
@@ -253,7 +271,7 @@ Debito tecnico noto:
 ```bash
 uv sync                                  # dipendenze
 uv run ruff check . && uv run ruff format --check .
-uv run pytest -q                         # 254 test al 2026-11-03
+uv run pytest -q                         # 351 test al 2026-11-04
 ./scripts/deploy.sh --apply              # produzione
 ./scripts/verify.sh
 ```
@@ -266,4 +284,4 @@ Migrazioni: `uv run alembic revision -m "…"`, poi il deploy applica
 `upgrade head` da solo. Le migrazioni già applicate in produzione:
 `fe398d565583` (schema iniziale) · `e077e6f8985d` (access code) ·
 `1b68e6a3f7e5` (eccezioni) · `81f880a2f4a3` (gruppo rivenditore) ·
-`4d2c9a1b7e38` (flag «non rinnovare»).
+`4d2c9a1b7e38` (flag «non rinnovare») · `c3f4d2a19b60` (richieste nuova linea).

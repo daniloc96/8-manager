@@ -15,8 +15,10 @@ di pannello (84 clienti). Cosa sa fare oggi:
 - incassi del mese raggruppati per rivenditore, registro rivenditori;
 - wizard `/nuovo` per creare cliente e linea, con il blocco credenziali da
   copiare nei pannelli;
-- rivenditori autorizzati dall'owner: vedono solo le proprie linee e inviano
-  richieste di rinnovo che l'owner approva o rifiuta;
+- rivenditori autorizzati dall'owner: vedono solo le proprie linee, inviano
+  richieste di rinnovo e chiedono nuove linee (nome, mesi, servizio, nota);
+  l'owner conferma scegliendo il prezzo e riceve il blocco da copiare nel
+  pannello;
 - reminder giornaliero alle 09:00, backup notturno alle 03:15, entrambi con
   deduplica su `notifications`;
 - sync dei pannelli con review, eccezioni accettate e chiusura delle linee

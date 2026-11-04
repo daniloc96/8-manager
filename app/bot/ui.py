@@ -152,6 +152,7 @@ def menu_keyboard(*, is_owner: bool, is_reseller: bool = False) -> InlineKeyboar
         rows.append([InlineKeyboardButton("👥 Rivenditori", callback_data="menu:resellers")])
     if is_reseller:
         rows.append([InlineKeyboardButton("🔁 Richiedi rinnovo", callback_data="menu:request")])
+        rows.append([InlineKeyboardButton("🆕 Richiedi nuova linea", callback_data="menu:newline")])
     if is_owner:
         rows.append([InlineKeyboardButton("⚙️ Impostazioni", callback_data="menu:settings")])
     return InlineKeyboardMarkup(rows)

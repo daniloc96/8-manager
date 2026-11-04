@@ -93,11 +93,16 @@ async def on_text(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         await handle_group_text(update, context)
         return
     from app.bot.editline import handle_text as handle_edit_text
+    from app.bot.line_request import handle_owner_price_text
+    from app.bot.line_request import handle_text as handle_line_request_text
     from app.bot.newline import handle_text as handle_new_text
     from app.bot.reseller import handle_request_text
     from app.bot.settings_bot import handle_text as handle_setting_text
 
     if await handle_new_text(update, context):
+        return
+
+    if await handle_line_request_text(update, context):
         return
 
     if await handle_edit_text(update, context):
@@ -111,6 +116,13 @@ async def on_text(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         isinstance(pending, str)
         and pending.startswith("reqmonths:")
         and await handle_request_text(update, context, pending)
+    ):
+        return
+
+    if (
+        isinstance(pending, str)
+        and pending.startswith("nlprice:")
+        and await handle_owner_price_text(update, context, pending)
     ):
         return
 

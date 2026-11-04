@@ -16,6 +16,7 @@ from app.models import (
     AuditLog,
     Customer,
     Line,
+    NewLineRequest,
     PanelLine,
     Platform,
     Renewal,
@@ -222,6 +223,16 @@ async def link_import_reconcile(
 
     _link_lucky_pairs(result, groups, occupied, platforms_by_line, today)
     _upgrade_lucky_services(lines, platforms_by_line)
+
+    await _link_requested_records(
+        session,
+        result=result,
+        groups=groups,
+        platforms=set(platforms),
+        occupied=occupied,
+        platforms_by_line=platforms_by_line,
+        lines=lines,
+    )
 
     if import_missing:
         await _import_groups(
@@ -435,6 +446,123 @@ async def _import_groups(
 
     for customer_id in sorted(touched_customers):
         await _assign_labels(session, customer_id)
+
+
+async def _link_requested_records(
+    session: AsyncSession,
+    *,
+    result: LinkResult,
+    groups: dict[tuple[str, str], dict[Platform, PanelLine]],
+    platforms: set[Platform],
+    occupied: set[tuple[int | None, Platform]],
+    platforms_by_line: dict[int, set[Platform]],
+    lines: dict[int, Line],
+) -> None:
+    """Aggancia le righe del pannello alle linee nate da una richiesta.
+
+    Il normale `/sync` non importa righe nuove, ma queste non sono davvero
+    nuove: la linea è già stata creata alla conferma dell'owner e aspetta solo
+    di essere collegata per ID.
+    """
+    for key in sorted(groups):
+        by_platform = groups[key]
+        pending = [
+            record
+            for record in by_platform.values()
+            if record.platform in platforms and record.line_id is None
+        ]
+        if not pending:
+            continue
+        line = await _requested_line(session, {record.username for record in pending})
+        if line is None:
+            continue
+        allowed = (
+            {Platform.LIVE_HALLO, Platform.VOD_NEWVOD}
+            if line.service is Service.LIVE_VOD
+            else {Platform.LIVE_HALLO}
+        )
+        selected = [record for record in pending if record.platform in allowed]
+        if not selected:
+            continue
+        await _link_requested_line(
+            session,
+            result=result,
+            line=line,
+            records=selected,
+            occupied=occupied,
+            platforms_by_line=platforms_by_line,
+        )
+        lines[line.id] = line
+
+
+async def _requested_line(session: AsyncSession, usernames: set[str]) -> Line | None:
+    """Linea già creata dal bot per una richiesta di nuova linea.
+
+    Il pannello non conosce il collegamento: lo tiene la richiesta, con l'ID
+    congelato. Se c'è, la riga va agganciata a quella linea invece di importarne
+    una nuova (e di duplicare cliente e linea).
+    """
+    if not usernames:
+        return None
+    request = await session.scalar(
+        select(NewLineRequest)
+        .where(
+            NewLineRequest.username.in_(usernames),
+            NewLineRequest.line_id.is_not(None),
+        )
+        .order_by(NewLineRequest.id)
+    )
+    if request is None or request.line_id is None:
+        return None
+    line = await session.get(Line, request.line_id)
+    if line is None or line.deleted_at is not None:
+        return None
+    already = await session.scalar(select(PanelLine.id).where(PanelLine.line_id == line.id))
+    if already is not None:
+        return None
+    return line
+
+
+async def _link_requested_line(
+    session: AsyncSession,
+    *,
+    result: LinkResult,
+    line: Line,
+    records: Sequence[PanelLine],
+    occupied: set[tuple[int | None, Platform]],
+    platforms_by_line: dict[int, set[Platform]],
+) -> None:
+    linked_here: list[Platform] = []
+    for record in records:
+        if (line.id, record.platform) in occupied:
+            _add_review(
+                result,
+                record.platform,
+                record.username,
+                f"linea già collegata a un'altra riga {record.platform.value}",
+            )
+            continue
+        record.line_id = line.id
+        occupied.add((line.id, record.platform))
+        platforms_by_line.setdefault(line.id, set()).add(record.platform)
+        _bump(result.imported, record.platform)
+        linked_here.append(record.platform)
+
+    if not linked_here:
+        return
+    session.add(
+        AuditLog(
+            action="panel_import",
+            entity="line",
+            entity_id=line.id,
+            payload={
+                "platforms": sorted(platform.value for platform in linked_here),
+                "service": line.service.value,
+                "expires_on": line.expires_on.isoformat(),
+                "via": "new_line_request",
+            },
+        )
+    )
 
 
 def _import_candidate(

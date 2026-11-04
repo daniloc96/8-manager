@@ -406,6 +406,12 @@ async def on_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
         await ask_which_line(update, context)
         return
 
+    if data == "menu:newline":
+        from app.bot.line_request import start_private
+
+        await start_private(update, context)
+        return
+
     handlers = {
         "menu:home": menu_home,
         "menu:due": show_due,

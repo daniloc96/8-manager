@@ -23,6 +23,7 @@ from app.bot import (
     flagged,
     group_menu,
     group_request,
+    line_request,
     lines,
     menu,
     newline,
@@ -48,7 +49,7 @@ COMMANDS = [
     BotCommand("incassi", "Rinnovi del mese"),
     BotCommand("nuovo", "Nuovo cliente"),
     BotCommand("richiedi", "Richiedi un rinnovo (rivenditori)"),
-    BotCommand("richieste", "Richieste in attesa (owner)"),
+    BotCommand("richieste", "Rinnovi e nuove linee in attesa (owner)"),
     BotCommand("collega", "Collega questo gruppo a un rivenditore"),
     BotCommand("stato", "Stato del bot e del database"),
     BotCommand("sync", "Sincronizza le linee dai pannelli"),
@@ -149,6 +150,10 @@ def build_application() -> Application:
     application.add_handler(CallbackQueryHandler(group_request.confirm, pattern=r"^greqy:"))
     application.add_handler(CallbackQueryHandler(group_request.cancel, pattern=r"^greqn:"))
     application.add_handler(CallbackQueryHandler(newline.on_callback, pattern=r"^new:"))
+    application.add_handler(CallbackQueryHandler(line_request.on_callback, pattern=r"^nlr:"))
+    application.add_handler(
+        CallbackQueryHandler(line_request.on_owner_callback, pattern=r"^(nla|nlp|nlx):")
+    )
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, search.on_text))
     application.add_error_handler(common.on_error)
     return application

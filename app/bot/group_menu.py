@@ -46,9 +46,10 @@ def _menu_keyboard() -> InlineKeyboardMarkup:
                 InlineKeyboardButton("🔁 Rinnovo", callback_data="gmenu:renew"),
             ],
             [
+                InlineKeyboardButton("🆕 Nuova linea", callback_data="gmenu:newline"),
                 InlineKeyboardButton("🔎 Cerca cliente", callback_data="gmenu:search"),
-                InlineKeyboardButton("❓ Aiuto", callback_data="gmenu:help"),
             ],
+            [InlineKeyboardButton("❓ Aiuto", callback_data="gmenu:help")],
         ]
     )
 
@@ -63,6 +64,8 @@ def _menu_text(name: str) -> str:
         "📅 <b>Scadenze</b> — le linee in scadenza nei prossimi "
         f"{get_settings().reminder_days} giorni\n"
         "🔁 <b>Rinnovo</b> — scegli la linea e il periodo da richiedere\n"
+        "🆕 <b>Nuova linea</b> — nome, mesi, servizio e nota: la richiesta "
+        "arriva all'owner\n"
         "🔎 <b>Cerca cliente</b> — quando le linee sono tante, cerca per nome\n\n"
         "Qui vedi solo le tue linee: i prezzi restano in privato."
     )
@@ -131,6 +134,12 @@ async def on_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
                 parse_mode=ParseMode.HTML,
                 reply_markup=_menu_keyboard(),
             )
+            return
+
+        if query.data == "gmenu:newline":
+            from app.bot.line_request import start_group
+
+            await start_group(update, context, reseller_id=reseller_id)
             return
 
         if query.data == "gmenu:due":
@@ -210,6 +219,8 @@ async def on_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
             "«Richiedi» su ognuna.\n"
             "🔁 <b>Rinnovo</b> fa scegliere linea e periodo; prima di inviare ti "
             "chiedo conferma.\n"
+            "🆕 <b>Nuova linea</b> raccoglie nome, mesi, servizio e nota e manda "
+            "la richiesta all'owner.\n"
             "🔎 <b>Cerca cliente</b> cerca per nome e apre scheda o rinnovo di quel "
             "cliente.\n\n"
             "Fuori dal menu restano i comandi <code>/scadenze</code> e "
@@ -392,15 +403,21 @@ async def _show_customer_renew(editing, session, data: str, reseller_id: int) ->
 
 
 async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE) -> bool:
-    """Testo scritto in gruppo: risponde alla ricerca. True se gestito."""
+    """Testo scritto in gruppo: wizard nuova linea oppure ricerca. True se gestito."""
     chat = update.effective_chat
     message = update.effective_message
     if chat is None or message is None or message.text is None or not is_group(chat.type):
         return False
-    if context.user_data.get("awaiting") != SEARCH_HINT:
-        return False
     text = message.text.strip()
     if not text:
+        return False
+
+    from app.bot.line_request import handle_text as handle_new_line_text
+
+    if await handle_new_line_text(update, context):
+        return True
+
+    if context.user_data.get("awaiting") != SEARCH_HINT:
         return False
 
     context.user_data.pop("awaiting", None)

@@ -187,7 +187,9 @@ def test_summary_contains_choices() -> None:
 
 
 def test_password_uses_secure_choice(monkeypatch) -> None:
-    monkeypatch.setattr(newline.secrets, "choice", lambda _alphabet: "a")
+    from app.services import credentials
+
+    monkeypatch.setattr(credentials.secrets, "choice", lambda _alphabet: "a")
     assert newline._password(4) == "aaaa"
 
 

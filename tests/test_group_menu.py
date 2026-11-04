@@ -137,6 +137,7 @@ async def test_start_in_group_shows_the_keyboard(session, bot_session_factory) -
     assert _callbacks(markup) == [
         "gmenu:due",
         "gmenu:renew",
+        "gmenu:newline",
         "gmenu:search",
         "gmenu:help",
     ]
@@ -171,6 +172,7 @@ async def test_owner_sees_the_same_menu_in_the_group(session, bot_session_factor
     assert _callbacks(markup) == [
         "gmenu:due",
         "gmenu:renew",
+        "gmenu:newline",
         "gmenu:search",
         "gmenu:help",
     ]

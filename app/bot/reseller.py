@@ -389,12 +389,14 @@ async def authorize(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 
 
 async def pending_for_owner(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Elenco delle richieste in attesa (owner)."""
+    """Elenco delle richieste in attesa: rinnovi e nuove linee (owner)."""
     user = update.effective_user
     message = update.effective_message
     if user is None or message is None:
         return
 
+    from app.models import Reseller, Service
+    from app.services.line_requests import pending_new_line_requests
     from app.services.requests import pending_requests
 
     async with session_scope() as session:
@@ -403,34 +405,58 @@ async def pending_for_owner(update: Update, context: ContextTypes.DEFAULT_TYPE) 
             await message.reply_html(texts.UNAUTHORIZED.format(user_id=user.id))
             return
         requests = await pending_requests(session)
-        rows = []
-        buttons = []
-        for request in requests:
-            line = await get_line(session, request.line_id)
-            if line is None:
-                continue
-            rows.append(
-                f"• #{request.id} {ui.esc(ui.line_title(line))} — "
-                f"{request.months} {'mese' if request.months == 1 else 'mesi'} "
-                f"da {request.requested_by_telegram_id}"
-            )
-            period = "mese" if request.months == 1 else "mesi"
-            buttons.append(
-                [
-                    InlineKeyboardButton(
-                        f"✅ Approva · {ui.line_title(line)[:30]} · {request.months} {period}",
-                        callback_data=f"rqa:{request.id}:{request.months}",
-                    )
-                ]
-            )
-            buttons.append(
-                [
-                    InlineKeyboardButton(
-                        "✖️ Rifiuta",
-                        callback_data=f"rqr:{request.id}",
-                    )
-                ]
-            )
+        new_lines = await pending_new_line_requests(session)
+        rows: list[str] = []
+        buttons: list[list[InlineKeyboardButton]] = []
+
+        if requests:
+            rows.append("<b>Rinnovi</b>")
+            for request in requests:
+                line = await get_line(session, request.line_id)
+                if line is None:
+                    continue
+                period = "mese" if request.months == 1 else "mesi"
+                rows.append(
+                    f"• rinnovo #{request.id} {ui.esc(ui.line_title(line))} — "
+                    f"{request.months} {period} "
+                    f"da {request.requested_by_telegram_id}"
+                )
+                buttons.append(
+                    [
+                        InlineKeyboardButton(
+                            f"✅ Approva · {ui.line_title(line)[:30]} · {request.months} {period}",
+                            callback_data=f"rqa:{request.id}:{request.months}",
+                        )
+                    ]
+                )
+                buttons.append(
+                    [InlineKeyboardButton("✖️ Rifiuta", callback_data=f"rqr:{request.id}")]
+                )
+
+        if new_lines:
+            if rows:
+                rows.append("")
+            rows.append("<b>Nuove linee</b>")
+            for request in new_lines:
+                reseller = await session.get(Reseller, request.reseller_id)
+                service = "Live + VOD" if request.service is Service.LIVE_VOD else "Live"
+                period = "mese" if request.months == 1 else "mesi"
+                rows.append(
+                    f"• nuova linea #{request.id} {ui.esc(request.name)} — "
+                    f"{request.months} {period} · {service} · "
+                    f"da {ui.esc(reseller.name if reseller else '?')}"
+                )
+                buttons.append(
+                    [
+                        InlineKeyboardButton(
+                            f"✅ Conferma · {request.name[:30]}",
+                            callback_data=f"nla:{request.id}",
+                        )
+                    ]
+                )
+                buttons.append(
+                    [InlineKeyboardButton("✖️ Rifiuta", callback_data=f"nlx:{request.id}")]
+                )
 
     body = ["🔔 <b>Richieste in attesa</b>", ""]
     body.extend(rows or ["Nessuna richiesta in attesa."])

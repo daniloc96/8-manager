@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import logging
-import secrets
 from datetime import datetime
 from zoneinfo import ZoneInfo
 
@@ -14,17 +13,22 @@ from app.bot import ui
 from app.bot.auth import access_for
 from app.config import get_settings
 from app.db import session_scope
-from app.models import PanelLine, Platform, Reseller, Service
+from app.models import Platform, Reseller, Service
+from app.services import credentials
 from app.services.anagrafica import ALIAS_MAX, LABEL_MAX
 from app.services.downloads import load_domains
 from app.services.lines import LineDraft, create_customer_and_line
 from app.services.months import MAX_MONTHS, MIN_MONTHS
-from app.services.text import format_eur, normalize_key, parse_price_to_cents
+from app.services.text import format_eur, parse_price_to_cents
 from app.services.vod import download_link
 
-logger = logging.getLogger(__name__)
+# Riusati dai test e dal blocco «da copiare nel pannello».
+ALPHABET = credentials.ALPHABET
+_password = credentials.password
+_unique_username = credentials.unique_username
+_username_for = credentials.username_for
 
-ALPHABET = "abcdefghjkmnpqrstuvwxyz23456789"
+logger = logging.getLogger(__name__)
 
 
 def _today():
@@ -385,36 +389,6 @@ async def _create(update: Update, context: ContextTypes.DEFAULT_TYPE, query) -> 
             ]
         ),
     )
-
-
-async def _unique_username(session, name: str, today) -> str:
-    """Username suggerito, libero rispetto a quelli già presenti nei pannelli.
-
-    Lo schema del pannello è nome + data: due clienti omonimi creati lo stesso
-    giorno otterrebbero lo stesso username e il conto colliderebbe.
-    """
-    base = _username_for(name, today)
-    candidate = base
-    suffix = 2
-    while (
-        await session.scalar(select(PanelLine.id).where(PanelLine.username_key == candidate))
-        is not None
-    ):
-        candidate = f"{base}{suffix}"
-        suffix += 1
-        if suffix > 99:
-            raise ValueError("troppi username simili: controlla il pannello.")
-    return candidate
-
-
-def _username_for(name: str, today) -> str:
-    """Stesso schema del pannello: nome senza spazi + giorno mese anno."""
-    slug = "".join(ch for ch in normalize_key(name) if ch.isalnum())[:14]
-    return f"{slug}{today:%d%m%y}"
-
-
-def _password(length: int = 8) -> str:
-    return "".join(secrets.choice(ALPHABET) for _ in range(length))
 
 
 async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE) -> bool:

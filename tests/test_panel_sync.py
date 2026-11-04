@@ -13,6 +13,7 @@ from app.models import (
     Platform,
     Renewal,
     RenewalSource,
+    Reseller,
     Service,
     Setting,
     SyncRun,
@@ -20,6 +21,10 @@ from app.models import (
 )
 from app.panels.base import PanelLine as PanelRow
 from app.panels.sync import link_import_reconcile, run_sync, upsert_rows
+from app.services.line_requests import (
+    approve_new_line_request,
+    create_new_line_request,
+)
 
 
 def row(
@@ -626,3 +631,57 @@ async def test_disabled_line_does_not_report_missing_row(engine) -> None:
     report = await run_sync([empty], today=date(2026, 11, 2), session_factory=factory)
 
     assert not any("sparita dal pannello" in review.reason for review in report.results[0].review)
+
+
+async def test_import_links_the_requested_line_instead_of_duplicating(session) -> None:
+    """La riga creata a mano nel pannello deve tornare sulla linea già creata."""
+    reseller = Reseller(name="Mario", name_key="mario", active=True, notify=True)
+    session.add(reseller)
+    await session.flush()
+    request = await create_new_line_request(
+        session,
+        reseller_id=reseller.id,
+        requested_by=1,
+        name="Mario Rossi",
+        months=3,
+        service=Service.LIVE_VOD,
+        note="Mario Rossi",
+        today=date(2026, 11, 4),
+    )
+    _request, _customer, line, username, _password = await approve_new_line_request(
+        session,
+        request_id=request.id,
+        price_cents=700,
+        approved_by=1,
+        today=date(2026, 11, 4),
+    )
+    await session.commit()
+
+    for platform in (Platform.LIVE_HALLO, Platform.VOD_NEWVOD):
+        await upsert_rows(
+            session,
+            platform,
+            [
+                row(
+                    platform,
+                    username,
+                    note="Mario Rossi",
+                    expires_on=line.expires_on,
+                )
+            ],
+        )
+
+    result = await link_import_reconcile(
+        session,
+        platforms=[Platform.LIVE_HALLO, Platform.VOD_NEWVOD],
+        today=date(2026, 11, 4),
+        import_missing=False,
+    )
+    await session.commit()
+
+    records = list((await session.scalars(select(PanelLine))).all())
+    assert {record.line_id for record in records} == {line.id}
+    assert sum(result.imported.values()) == 2
+    # Nessun cliente e nessuna linea duplicati.
+    assert await session.scalar(select(func.count(Customer.id))) == 1
+    assert await session.scalar(select(func.count(Line.id))) == 1

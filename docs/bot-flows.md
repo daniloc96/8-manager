@@ -217,7 +217,7 @@ La linea resta `da creare nel pannello` finché il sync non la trova.
 - vede solo le linee con `reseller_id` uguale al suo;
 - cerca, consulta la scheda, vede le scadenze delle sue linee;
 - **non** modifica prezzi, scadenze o dati tecnici;
-- può inviare una richiesta di rinnovo.
+- può inviare una richiesta di rinnovo o chiedere una nuova linea.
 
 ### Richiesta di rinnovo
 
@@ -246,6 +246,59 @@ quella richiesta. Alla
 conferma il rinnovo viene registrato e la risposta torna al rivenditore e nel
 gruppo di origine.
 
+### Richiesta di nuova linea
+
+Il rivenditore chiede una linea che non esiste ancora, dal privato o dalla
+pulsantiera del gruppo:
+
+```
+[🆕 Nuova linea]
+→ nome del cliente (è anche la base dell'ID)
+→ mesi (1–12, oppure «Altro…» fino a 36)
+→ Live oppure Live + VOD
+→ nota facoltativa (finisce identica nel pannello)
+→ riepilogo e invio
+```
+
+L'ID si genera **alla richiesta**, non alla conferma: nome normalizzato più
+giorno, mese e anno a due cifre, per esempio `mariorossi041126`. Se lo stesso
+nome è già usato si aggiunge `2`, `3`, … così la data non cambia anche se
+l'owner conferma qualche giorno dopo.
+
+All'owner arriva:
+
+```
+🆕 Il rivenditore Mario chiede una nuova linea
+
+Cliente: Mario Rossi
+Servizio: Live + VOD
+Durata: 3 mesi
+ID: mariorossi041126
+Nota: Mario amico di Luca
+Da: gruppo «OTTO»
+
+[✅ Conferma] [✖️ Rifiuta]
+```
+
+**Conferma** chiede solo il prezzo mensile (preset, più il default del
+rivenditore se impostato) e poi crea un **cliente nuovo** e la linea. Il
+messaggio finale contiene un blocco monospace con esattamente i valori da
+digitare nel pannello:
+
+```
+SERVIZIO: Live + VOD
+ID: mariorossi041126
+PASSWORD: Xy7k2p
+DURATA: 3 mesi
+NOTE: Mario amico di Luca
+```
+
+Si copia e si incolla nel pannello; la linea resta «da creare nel pannello»
+finché il sync non trova l'ID. **Rifiuta** chiude la richiesta senza creare
+niente. L'esito (conferma o rifiuto) torna nel gruppo o nel privato da cui è
+partita la richiesta. `/richieste` elenca sia i rinnovi sia le nuove linee in
+attesa.
+
 ## Gruppo
 
 Implementato: un gruppo può essere collegato a un rivenditore.
@@ -260,7 +313,9 @@ Regole:
 
 - nel gruppo il bot risponde a `/start` (menu a pulsanti), a `/cerca <nome>` e
   ai comandi indirizzati; il testo libero non è una ricerca, così la privacy
-  mode può restare attiva;
+  mode può restare attiva. Il menu ha **Scadenze**, **Rinnovo**, **Nuova
+  linea**, **Cerca cliente** e **Aiuto**: la richiesta di nuova linea si
+  compila interamente nel gruppo, rispondendo ai messaggi del bot;
 - chiunque nel gruppo collegato vede le scadenze e le ricerche di **quel**
   rivenditore, ma non può modificare nulla: prezzi, rinnovi e
   wizard restano in privato e richiedono l'identità personale (ID Telegram del

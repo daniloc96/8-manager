@@ -11,6 +11,7 @@ from app.models.enums import (
     enum_column,
 )
 from app.models.line import Line
+from app.models.new_line_request import NewLineRequest
 from app.models.notification import Notification
 from app.models.panel_line import PanelLine
 from app.models.renewal import Renewal
@@ -26,6 +27,7 @@ __all__ = [
     "Customer",
     "Line",
     "LineStatus",
+    "NewLineRequest",
     "Notification",
     "PanelLine",
     "Platform",
