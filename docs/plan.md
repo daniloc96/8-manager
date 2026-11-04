@@ -115,9 +115,11 @@ Bot (owner):
   durata scelta, conferma al rivenditore e nel gruppo di origine;
 - **richiesta di nuova linea** (rivenditore, privato o gruppo): nome, mesi,
   servizio e nota; l'ID si congela alla richiesta (`nome` + `GGMMAA`) e l'owner
-  conferma scegliendo il prezzo. Alla conferma nascono cliente nuovo e linea e
-  il bot mostra il blocco monospace da copiare nel pannello (servizio, ID,
-  password, durata, note). `/richieste` elenca rinnovi e nuove linee;
+  conferma scegliendo il prezzo. Alla conferma nascono cliente nuovo e linea,
+  il bot esegue una sync completa e manda al gruppo i codici veri del pannello
+  (username, password, codice e link Live/VOD). Se il pannello non è completo
+  resta il pulsante «Sincronizza e avvisa». `/richieste` elenca rinnovi e
+  nuove linee;
 - **wizard `/nuovo` completo**: nome, alias, servizio, rivenditore, etichetta,
   prezzo, durata, ID pannello e codice di accesso. Alias, etichetta e dati
   tecnici si possono saltare con **Salta**; il blocco finale da copiare nel
@@ -217,13 +219,14 @@ dominio o credenziale, non cliente.
 - **Richiesta di nuova linea dal rivenditore**, dal privato e dal gruppo. Il
   wizard chiede nome, mesi, Live/Live + VOD e una nota; l'ID si genera alla
   richiesta (nome + giorno/mese/anno a due cifre) e non cambia se l'owner
-  conferma dopo. L'owner riceve «Il rivenditore … chiede una nuova linea», può
-  rifiutare oppure confermare scegliendo il prezzo. Alla conferma nascono un
-  cliente nuovo e la linea; il messaggio finale contiene un unico blocco
-  monospace con servizio, ID, password, durata e note, da copiare identico nel
-  pannello. Migrazione `c3f4d2a19b60`, 16 test nuovi. Il `/sync` collega la
-  riga del pannello alla linea della richiesta tramite l'ID congelato, senza
-  duplicare cliente e linea.
+  conferma dopo. L'owner riceve «Il rivenditore … chiede una nuova linea» con
+  il blocco monospace da creare nel pannello, può rifiutare oppure confermare
+  scegliendo il prezzo. Alla conferma nascono un cliente nuovo e la linea, poi
+  il bot esegue una **sync completa**: aggancia la riga del pannello all'ID
+  congelato e manda al gruppo i codici veri (username, password, codice) e i
+  link Live/VOD. Se il pannello non è ancora completo, non manda niente al
+  gruppo e offre «🔄 Sincronizza e avvisa». Migrazioni `c3f4d2a19b60` e
+  `d9e1a7c4b2f0`, 18 test nuovi.
 
 ## Corretto il 2026-11-03
 
@@ -271,7 +274,7 @@ Debito tecnico noto:
 ```bash
 uv sync                                  # dipendenze
 uv run ruff check . && uv run ruff format --check .
-uv run pytest -q                         # 351 test al 2026-11-04
+uv run pytest -q                         # 353 test al 2026-11-04
 ./scripts/deploy.sh --apply              # produzione
 ./scripts/verify.sh
 ```
@@ -284,4 +287,5 @@ Migrazioni: `uv run alembic revision -m "…"`, poi il deploy applica
 `upgrade head` da solo. Le migrazioni già applicate in produzione:
 `fe398d565583` (schema iniziale) · `e077e6f8985d` (access code) ·
 `1b68e6a3f7e5` (eccezioni) · `81f880a2f4a3` (gruppo rivenditore) ·
-`4d2c9a1b7e38` (flag «non rinnovare») · `c3f4d2a19b60` (richieste nuova linea).
+`4d2c9a1b7e38` (flag «non rinnovare») · `c3f4d2a19b60` (richieste nuova linea) ·
+`d9e1a7c4b2f0` (avviso codici al gruppo).

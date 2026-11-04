@@ -648,7 +648,7 @@ async def test_import_links_the_requested_line_instead_of_duplicating(session) -
         note="Mario Rossi",
         today=date(2026, 11, 4),
     )
-    _request, _customer, line, username, _password = await approve_new_line_request(
+    _request, _customer, line, username = await approve_new_line_request(
         session,
         request_id=request.id,
         price_cents=700,

@@ -16,7 +16,7 @@ from app.models import (
     utcnow,
 )
 from app.services.anagrafica import NOTES_MAX
-from app.services.credentials import ensure_username, password, username_for
+from app.services.credentials import ensure_username, username_for
 from app.services.lines import LineDraft, create_customer_and_line
 from app.services.months import MAX_MONTHS, MIN_MONTHS
 
@@ -122,8 +122,12 @@ async def approve_new_line_request(
     price_cents: int,
     approved_by: int | None,
     today: date,
-) -> tuple[NewLineRequest, Customer, Line, str, str]:
-    """Conferma la richiesta: cliente nuovo, linea e credenziali da copiare."""
+) -> tuple[NewLineRequest, Customer, Line, str]:
+    """Conferma la richiesta: cliente nuovo, linea e ID definitivo.
+
+    Le credenziali non si inventano: arrivano dal pannello con il sync
+    successivo. Qui si crea solo il lato bot, agganciato dall'ID.
+    """
     request = await session.get(NewLineRequest, request_id)
     if request is None or request.status is not RequestStatus.PENDING:
         raise NewLineRequestError("richiesta non trovata o già gestita.")
@@ -157,7 +161,7 @@ async def approve_new_line_request(
     request.resolved_at = utcnow()
     request.resolved_by_telegram_id = approved_by
     await session.flush()
-    return request, customer, line, username, password()
+    return request, customer, line, username
 
 
 async def reject_new_line_request(

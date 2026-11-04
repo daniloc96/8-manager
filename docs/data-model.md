@@ -81,8 +81,9 @@ Nessuno stato pagato/non pagato: il totale è informativo.
 
 - `renewal_requests`: richieste dei rivenditori con stato e chat di origine.
 - `new_line_requests`: richieste di **nuova linea** (cliente nuovo) con nome,
-  ID congelato con la data della richiesta, mesi, servizio, nota, stato e
-  `line_id` valorizzato alla conferma.
+  ID congelato con la data della richiesta, mesi, servizio, nota, stato,
+  `line_id` valorizzato alla conferma e `announced_at` quando i codici sono
+  stati mandati al gruppo.
 - `notifications`: deduplica dei reminder.
 - `audit_log`: modifiche manuali.
 - `settings`: valori globali (`live_domain`, `vod_domain`), allineati dal sync

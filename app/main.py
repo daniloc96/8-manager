@@ -152,7 +152,7 @@ def build_application() -> Application:
     application.add_handler(CallbackQueryHandler(newline.on_callback, pattern=r"^new:"))
     application.add_handler(CallbackQueryHandler(line_request.on_callback, pattern=r"^nlr:"))
     application.add_handler(
-        CallbackQueryHandler(line_request.on_owner_callback, pattern=r"^(nla|nlp|nlx):")
+        CallbackQueryHandler(line_request.on_owner_callback, pattern=r"^(nla|nlp|nlx|nls):")
     )
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, search.on_text))
     application.add_error_handler(common.on_error)

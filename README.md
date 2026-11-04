@@ -17,8 +17,8 @@ di pannello (84 clienti). Cosa sa fare oggi:
   copiare nei pannelli;
 - rivenditori autorizzati dall'owner: vedono solo le proprie linee, inviano
   richieste di rinnovo e chiedono nuove linee (nome, mesi, servizio, nota);
-  l'owner conferma scegliendo il prezzo e riceve il blocco da copiare nel
-  pannello;
+  l'owner conferma scegliendo il prezzo, il bot esegue la sync e manda al
+  gruppo i codici e i link presi dai pannelli;
 - reminder giornaliero alle 09:00, backup notturno alle 03:15, entrambi con
   deduplica su `notifications`;
 - sync dei pannelli con review, eccezioni accettate e chiusura delle linee

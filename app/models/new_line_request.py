@@ -48,4 +48,6 @@ class NewLineRequest(Base):
     )
     resolved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     resolved_by_telegram_id: Mapped[int | None] = mapped_column(BigInteger)
+    # Quando i codici sono stati mandati al gruppo: evita doppi invii sul retry.
+    announced_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     line_id: Mapped[int | None] = mapped_column(ForeignKey("lines.id", ondelete="SET NULL"))

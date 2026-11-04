@@ -265,41 +265,52 @@ giorno, mese e anno a due cifre, per esempio `mariorossi041126`. Se lo stesso
 nome è già usato si aggiunge `2`, `3`, … così la data non cambia anche se
 l'owner conferma qualche giorno dopo.
 
-All'owner arriva:
+All'owner arriva il blocco monospace con quello che deve creare nel pannello
+(la password la sceglie lui):
 
 ```
 🆕 Il rivenditore Mario chiede una nuova linea
 
 Cliente: Mario Rossi
-Servizio: Live + VOD
-Durata: 3 mesi
-ID: mariorossi041126
-Nota: Mario amico di Luca
 Da: gruppo «OTTO»
+
+SERVIZIO: Live + VOD
+ID: mariorossi041126
+DURATA: 3 mesi
+NOTE: Mario amico di Luca
 
 [✅ Conferma] [✖️ Rifiuta]
 ```
 
 **Conferma** chiede solo il prezzo mensile (preset, più il default del
-rivenditore se impostato) e poi crea un **cliente nuovo** e la linea. Il
-messaggio finale contiene un blocco monospace con esattamente i valori da
-digitare nel pannello:
+rivenditore se impostato), crea un **cliente nuovo** e la linea, poi **esegue
+una sync completa dei pannelli**. Il sync normale riconosce l'ID della
+richiesta e collega la riga alla linea già creata, senza duplicare cliente e
+linea e senza bisogno di `/sync importa`.
+
+Quando Live (e VOD, se richiesto) sono stati trovati, il bot manda nel gruppo
+di origine i **codici veri presi dal pannello**: username, password, codice,
+ID, scadenza, più i link Live/VOD:
 
 ```
-SERVIZIO: Live + VOD
-ID: mariorossi041126
-PASSWORD: Xy7k2p
-DURATA: 3 mesi
-NOTE: Mario amico di Luca
+✅ Nuova linea attiva
+
+Mario Rossi · Linea unica
+Live
+username: mariorossi041126
+password: Xy7k2p
+codice: ...
+link Live: http://.../get.php?username=...&password=...&type=m3u_plus&output=mpegts
+VOD
+...
 ```
 
-Si copia e si incolla nel pannello; la linea resta «da creare nel pannello»
-finché il sync non trova l'ID. Non serve `/sync importa`: il sync normale
-riconosce l'ID della richiesta e collega la riga alla linea già creata, senza
-duplicare cliente e linea. **Rifiuta** chiude la richiesta senza creare
-niente. L'esito (conferma o rifiuto) torna nel gruppo o nel privato da cui è
-partita la richiesta. `/richieste` elenca sia i rinnovi sia le nuove linee in
-attesa.
+Se il pannello non è ancora completo, l'owner non riceve un messaggio al
+gruppo: il bot gli mostra il blocco da creare e il pulsante **🔄 Sincronizza e
+avvisa**. Premuto dopo aver completato il pannello, rifà la sync e manda i
+codici. **Rifiuta** chiude la richiesta senza creare niente. L'esito (conferma
+o rifiuto) torna nel gruppo o nel privato da cui è partita la richiesta.
+`/richieste` elenca sia i rinnovi sia le nuove linee in attesa.
 
 ## Gruppo
 

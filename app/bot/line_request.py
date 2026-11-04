@@ -23,7 +23,7 @@ from app.bot import ui
 from app.bot.auth import access_for, is_group
 from app.config import get_settings
 from app.db import session_scope
-from app.models import NewLineRequest, RequestStatus, Reseller, Service
+from app.models import NewLineRequest, Platform, RequestStatus, Reseller, Service, utcnow
 from app.services.line_requests import (
     NAME_MAX,
     NewLineRequestError,
@@ -32,12 +32,14 @@ from app.services.line_requests import (
     reject_new_line_request,
 )
 from app.services.months import MAX_MONTHS, MIN_MONTHS
+from app.services.queries import get_line
 from app.services.text import format_eur, parse_price_to_cents
 
 logger = logging.getLogger(__name__)
 
 STATE_KEY = "new_line_request"
 OWNER_PRICE_PREFIX = "nlprice"
+RETRY_PREFIX = "nls"
 
 
 def _today():
@@ -410,18 +412,46 @@ async def _send(update: Update, context: ContextTypes.DEFAULT_TYPE, state: dict)
     await _notify_owner(context, **payload)
 
 
+def _copy_block(*, service: Service, username: str, months: int, note: str | None) -> str:
+    lines = [
+        f"SERVIZIO: {_service_label(service)}",
+        f"ID: {username}",
+        f"DURATA: {months} {_months_word(months)}",
+    ]
+    if note:
+        lines.append(f"NOTE: {note}")
+    block = "\n".join(ui.esc(line) for line in lines)
+    return f"<pre>{block}</pre>"
+
+
+def _expected_platforms(service: Service) -> set[Platform]:
+    if service is Service.LIVE_VOD:
+        return {Platform.LIVE_HALLO, Platform.VOD_NEWVOD}
+    return {Platform.LIVE_HALLO}
+
+
+def _platform_label(platform: Platform) -> str:
+    labels = {Platform.LIVE_HALLO: "Live", Platform.VOD_NEWVOD: "VOD"}
+    return labels.get(platform, platform.value)
+
+
 def _owner_text(**payload) -> str:
-    note = payload["note"] or "—"
     where = f"gruppo «{ui.esc(payload['group_title'])}»" if payload["group_title"] else "in privato"
+    block = _copy_block(
+        service=payload["service"],
+        username=payload["username"],
+        months=payload["months"],
+        note=payload["note"],
+    )
     return (
         f"🆕 <b>Il rivenditore {ui.esc(payload['reseller_name'])} "
         "chiede una nuova linea</b>\n\n"
         f"Cliente: <b>{ui.esc(payload['name'])}</b>\n"
-        f"Servizio: {_service_label(payload['service'])}\n"
-        f"Durata: {payload['months']} {_months_word(payload['months'])}\n"
-        f"ID: <code>{ui.esc(payload['username'])}</code>\n"
-        f"Nota: <code>{ui.esc(note)}</code>\n"
-        f"Da: {where}"
+        f"Da: {where}\n\n"
+        f"{block}\n\n"
+        "<i>Crea la linea nel pannello con questi valori (password a tua "
+        "scelta), poi conferma: il bot esegue la sync e manda i codici al "
+        "gruppo.</i>"
     )
 
 
@@ -507,6 +537,11 @@ async def on_owner_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) 
     if kind == "nlx":
         await query.answer()
         await _reject(update, context, request_id, editing=ui.Editor(query))
+        return
+
+    if kind == RETRY_PREFIX:
+        await query.answer()
+        await _retry(update, context, request_id, editing=ui.Editor(query))
 
 
 async def _reseller_default_price(request_id: int) -> int | None:
@@ -581,7 +616,7 @@ async def _approve(
             await editing.edit_text("Solo l'owner può confermare.")
             return
         try:
-            request, customer, line, username, password = await approve_new_line_request(
+            request, customer, line, username = await approve_new_line_request(
                 session,
                 request_id=request_id,
                 price_cents=price_cents,
@@ -593,12 +628,13 @@ async def _approve(
             return
         reseller = await session.get(Reseller, request.reseller_id)
         payload = {
+            "request_id": request.id,
+            "line_id": line.id,
             "name": customer.name,
             "reseller_name": reseller.name if reseller is not None else "—",
             "service": request.service,
             "months": request.months,
             "username": username,
-            "password": password,
             "note": request.note,
             "price_cents": line.monthly_price_cents,
             "expires_on": line.expires_on,
@@ -606,48 +642,189 @@ async def _approve(
             "requested_by": request.requested_by_telegram_id,
         }
 
-    await editing.edit_text(_created_text(**payload), parse_mode=ParseMode.HTML)
-    await _announce(context, payload=payload)
+    await editing.edit_text(
+        "⏳ <b>Linea creata</b>\n\nSincronizzo i pannelli per prendere codici e link…",
+        parse_mode=ParseMode.HTML,
+    )
+    await _finish(context, payload=payload, editing=editing)
 
 
-def _created_text(**payload) -> str:
-    lines = [
-        f"SERVIZIO: {_service_label(payload['service'])}",
-        f"ID: {payload['username']}",
-        f"PASSWORD: {payload['password']}",
-        f"DURATA: {payload['months']} {_months_word(payload['months'])}",
-    ]
-    if payload["note"]:
-        lines.append(f"NOTE: {payload['note']}")
+async def _sync_panels() -> None:
+    """Sync completa, come `/sync`: è quella che porta i dati dei pannelli."""
+    from app.panels.factory import build_adapters
+    from app.panels.sync import run_sync
+    from app.services.reviews import store_reviews
 
-    block = "\n".join(ui.esc(line) for line in lines)
-    return (
-        "✅ <b>Nuova linea confermata</b>\n\n"
-        f"Cliente: <b>{ui.esc(payload['name'])}</b>\n"
-        f"Rivenditore: {ui.esc(payload['reseller_name'])}\n"
-        f"Prezzo: {format_eur(payload['price_cents'])}/mese · "
-        f"Scadenza: {ui.italian_date(payload['expires_on'])}\n\n"
-        "<pre>"
-        f"{block}"
-        "</pre>\n\n"
-        "<i>Tutto quello che serve al pannello è qui sopra: copia e incolla "
-        "ID, password e nota. La linea resta «da creare nel pannello» finché "
-        "il sync non la trova.</i>"
+    adapters, skipped = build_adapters()
+    report = await run_sync(adapters, today=_today(), skipped=skipped)
+    async with session_scope() as session:
+        await store_reviews(session, report)
+
+
+async def _panel_details(payload: dict) -> dict | None:
+    """Testo con i codici, se il pannello ha già tutte le righe attese."""
+    from app.bot.codes import _line_block
+    from app.services.downloads import load_domains
+
+    expected = _expected_platforms(payload["service"])
+    async with session_scope() as session:
+        line = await get_line(session, payload["line_id"])
+        if line is None:
+            return None
+        domains = await load_domains(session)
+        present = {panel.platform for panel in line.panel_lines}
+        block = "\n".join(_line_block(line, domains))
+        text = _active_text(payload=payload, line=line, block=block)
+        return {"missing": expected - present, "text": text}
+
+
+async def _finish(context: ContextTypes.DEFAULT_TYPE, *, payload: dict, editing: ui.Editor) -> None:
+    """Dopo la sync: codici al gruppo, oppure attesa con il pulsante di retry."""
+    try:
+        await _sync_panels()
+    except Exception:
+        logger.exception("Nuova linea %s: sync fallita", payload["request_id"])
+
+    details = await _panel_details(payload)
+    if details is not None and not details["missing"]:
+        await editing.edit_text(
+            details["text"],
+            parse_mode=ParseMode.HTML,
+            reply_markup=InlineKeyboardMarkup([]),
+        )
+        await _send_to_origin(context, payload=payload, text=details["text"])
+        return
+
+    missing = details["missing"] if details is not None else _expected_platforms(payload["service"])
+    await editing.edit_text(
+        _waiting_text(payload, missing),
+        parse_mode=ParseMode.HTML,
+        reply_markup=_retry_keyboard(payload["request_id"]),
     )
 
 
-async def _announce(context: ContextTypes.DEFAULT_TYPE, *, payload: dict) -> None:
+async def _retry(
+    update: Update,
+    context: ContextTypes.DEFAULT_TYPE,
+    request_id: int,
+    *,
+    editing: ui.Editor,
+) -> None:
+    """«Sincronizza e avvisa»: riprova dopo che il pannello è stato completato."""
+    user = update.effective_user
+    if user is None:
+        return
+
+    async with session_scope() as session:
+        access = await access_for(update, session)
+        if not access.is_owner:
+            await editing.edit_text("Solo l'owner può sincronizzare.")
+            return
+        request = await session.get(NewLineRequest, request_id)
+        if (
+            request is None
+            or request.status is not RequestStatus.APPROVED
+            or request.line_id is None
+        ):
+            await editing.edit_text("Richiesta non trovata o non ancora confermata.")
+            return
+        line = await get_line(session, request.line_id)
+        if line is None:
+            await editing.edit_text("La linea non esiste più.")
+            return
+        reseller = await session.get(Reseller, request.reseller_id)
+        payload = {
+            "request_id": request.id,
+            "line_id": line.id,
+            "name": line.customer.name,
+            "reseller_name": reseller.name if reseller is not None else "—",
+            "service": request.service,
+            "months": request.months,
+            "username": request.username,
+            "note": request.note,
+            "price_cents": line.monthly_price_cents,
+            "expires_on": line.expires_on,
+            "origin_chat_id": request.origin_chat_id,
+            "requested_by": request.requested_by_telegram_id,
+        }
+
+    await editing.edit_text(
+        "⏳ Sincronizzo i pannelli…",
+        parse_mode=ParseMode.HTML,
+    )
+    await _finish(context, payload=payload, editing=editing)
+
+
+def _active_text(*, payload: dict, line, block: str) -> str:
+    body = ["✅ <b>Nuova linea attiva</b>", "", block, ""]
+    if payload["note"]:
+        body.append(f"Nota: <code>{ui.esc(payload['note'])}</code>")
+    body.append(f"Rivenditore: {ui.esc(payload['reseller_name'])}")
+    body.append(
+        f"Prezzo: {format_eur(payload['price_cents'])}/mese · "
+        f"Scadenza: {ui.italian_date(line.expires_on)}"
+    )
+    return "\n".join(body)
+
+
+def _waiting_text(payload: dict, missing: set[Platform]) -> str:
+    labels = ", ".join(
+        _platform_label(platform) for platform in sorted(missing, key=lambda p: p.value)
+    )
+    missing_text = labels or "i dati del pannello"
+    block = _copy_block(
+        service=payload["service"],
+        username=payload["username"],
+        months=payload["months"],
+        note=payload["note"],
+    )
+    return (
+        "⏳ <b>Linea creata, ma il pannello non è ancora completo</b>\n\n"
+        f"Non trovo: {ui.esc(missing_text)}\n\n"
+        "Crea la linea nel pannello con questi valori (password a tua scelta):\n"
+        f"{block}\n\n"
+        "Poi premi «🔄 Sincronizza e avvisa»."
+    )
+
+
+def _retry_keyboard(request_id: int) -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(
+        [
+            [
+                InlineKeyboardButton(
+                    "🔄 Sincronizza e avvisa",
+                    callback_data=f"{RETRY_PREFIX}:{request_id}",
+                )
+            ],
+            [InlineKeyboardButton("🏠 Menu", callback_data="menu:home")],
+        ]
+    )
+
+
+async def _send_to_origin(context: ContextTypes.DEFAULT_TYPE, *, payload: dict, text: str) -> None:
+    """Manda i codici al gruppo (o al privato) una volta sola."""
+    async with session_scope() as session:
+        request = await session.get(NewLineRequest, payload["request_id"])
+        if request is None or request.announced_at is not None:
+            return
+
     target = payload["origin_chat_id"] or payload["requested_by"]
     if target is None or context.bot is None:
         return
     try:
         await context.bot.send_message(
             chat_id=target,
-            text=_created_text(**payload),
+            text=text,
             parse_mode=ParseMode.HTML,
         )
     except Exception:
         logger.warning("Nuova linea: esito non consegnato a %s", target)
+        return
+
+    async with session_scope() as session:
+        request = await session.get(NewLineRequest, payload["request_id"])
+        if request is not None:
+            request.announced_at = utcnow()
 
 
 async def _reject(

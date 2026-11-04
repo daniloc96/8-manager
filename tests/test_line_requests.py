@@ -14,9 +14,12 @@ from app.bot import group_menu, line_request, reseller
 from app.models import (
     Line,
     NewLineRequest,
+    PanelLine,
+    Platform,
     RequestStatus,
     Reseller,
     Service,
+    Setting,
 )
 from app.services.line_requests import (
     NewLineRequestError,
@@ -41,6 +44,16 @@ def _env(monkeypatch):
     get_settings.cache_clear()
     yield
     get_settings.cache_clear()
+
+
+@pytest.fixture(autouse=True)
+def _fake_sync(monkeypatch):
+    """Nessun test deve uscire verso i pannelli veri."""
+
+    async def no_sync() -> None:
+        return None
+
+    monkeypatch.setattr(line_request, "_sync_panels", no_sync)
 
 
 @pytest.fixture
@@ -161,6 +174,40 @@ async def _request(
     return request
 
 
+async def _add_panels(
+    factory,
+    *,
+    line_id: int,
+    username: str,
+    note: str | None,
+    expires_on: date,
+    service: Service = Service.LIVE_VOD,
+) -> None:
+    """Simula i dati che il sync porta dal pannello."""
+    platforms = (
+        [Platform.LIVE_HALLO, Platform.VOD_NEWVOD]
+        if service is Service.LIVE_VOD
+        else [Platform.LIVE_HALLO]
+    )
+    async with factory() as session:
+        for platform in platforms:
+            session.add(
+                PanelLine(
+                    line_id=line_id,
+                    platform=platform,
+                    username=username,
+                    username_key=username,
+                    password="Xy7k2p",
+                    access_code=username,
+                    expires_on=expires_on,
+                    note=note,
+                )
+            )
+        session.add(Setting(key="live_domain", value="http://live.test"))
+        session.add(Setting(key="vod_domain", value="http://vod.test"))
+        await session.commit()
+
+
 # --- servizio ---------------------------------------------------------------
 
 
@@ -192,7 +239,7 @@ async def test_approval_creates_a_new_customer_and_line(session) -> None:
     reseller_row = await _seed(session)
     request = await _request(session, reseller_row)
 
-    approved, customer, line, username, password = await approve_new_line_request(
+    approved, customer, line, username = await approve_new_line_request(
         session,
         request_id=request.id,
         price_cents=700,
@@ -212,7 +259,6 @@ async def test_approval_creates_a_new_customer_and_line(session) -> None:
     assert line.expires_on == date(2027, 2, 10)
     # L'ID resta quello del giorno della richiesta, non dell'approvazione.
     assert username == "mariorossi041126"
-    assert len(password) == 8
 
 
 async def test_rejection_creates_nothing(session) -> None:
@@ -298,14 +344,7 @@ async def test_owner_cannot_start_the_reseller_wizard(session, bot_session_facto
 # --- conferma owner ---------------------------------------------------------
 
 
-async def test_owner_confirmation_asks_the_price_then_prints_the_copy_block(
-    session, bot_session_factory
-) -> None:
-    reseller_row = await _seed(session, with_group=False)
-    request = await _request(session, reseller_row, months=3)
-    ctx = context()
-    owner_chat = SimpleNamespace(id=OWNER_ID, type="private")
-
+async def _confirm_with_price(ctx, request, owner_chat):
     ask = callback_update(f"nla:{request.id}", chat=owner_chat, user_id=OWNER_ID)
     await line_request.on_owner_callback(ask, ctx)
     assert "Prezzo mensile" in ask.callback_query.edits[-1]
@@ -315,25 +354,108 @@ async def test_owner_confirmation_asks_the_price_then_prints_the_copy_block(
 
     confirm = callback_update(f"nlp:{request.id}:default", chat=owner_chat, user_id=OWNER_ID)
     await line_request.on_owner_callback(confirm, ctx)
+    return confirm
+
+
+async def test_confirmation_without_panel_data_offers_retry(session, bot_session_factory) -> None:
+    reseller_row = await _seed(session, with_group=False)
+    request = await _request(session, reseller_row, months=3)
+    ctx = context()
+    owner_chat = SimpleNamespace(id=OWNER_ID, type="private")
+
+    confirm = await _confirm_with_price(ctx, request, owner_chat)
 
     body = confirm.callback_query.edits[-1]
+    assert "Linea creata, ma il pannello non è ancora completo" in body
+    assert "Non trovo: Live, VOD" in body
     assert "<pre>" in body
     assert "ID: mariorossi041126" in body
-    assert "PASSWORD:" in body
     assert "DURATA: 3 mesi" in body
-    assert "SERVIZIO: Live + VOD" in body
     assert "NOTE: Mario amico di Luca" in body
-    assert "7,00 €/mese" in body
+    assert "PASSWORD:" not in body
+    assert f"nls:{request.id}" in _callbacks(confirm.callback_query.markup)
 
     async with bot_session_factory() as check:
         stored = await check.get(NewLineRequest, request.id)
         assert stored.status is RequestStatus.APPROVED
         line = await check.get(Line, stored.line_id)
         assert line is not None and line.monthly_price_cents == 700
+        assert stored.announced_at is None
 
-    # L'esito torna al rivenditore in privato.
+    # Niente codici, niente messaggio al gruppo.
+    assert ctx.bot.sent == []
+
+
+async def test_retry_after_panel_creation_sends_codes_and_links(
+    session, bot_session_factory
+) -> None:
+    reseller_row = await _seed(session, with_group=False)
+    request = await _request(session, reseller_row, months=3)
+    ctx = context()
+    owner_chat = SimpleNamespace(id=OWNER_ID, type="private")
+    await _confirm_with_price(ctx, request, owner_chat)
+
+    async with bot_session_factory() as check:
+        stored = await check.get(NewLineRequest, request.id)
+        line_id = stored.line_id
+    await _add_panels(
+        bot_session_factory,
+        line_id=line_id,
+        username=request.username,
+        note=request.note,
+        expires_on=date(2027, 2, 4),
+    )
+
+    retry = callback_update(f"nls:{request.id}", chat=owner_chat, user_id=OWNER_ID)
+    await line_request.on_owner_callback(retry, ctx)
+
+    body = retry.callback_query.edits[-1]
+    assert "Nuova linea attiva" in body
+    assert "username: <code>mariorossi041126</code>" in body
+    assert "password: <code>Xy7k2p</code>" in body
+    assert (
+        "link Live: <code>http://live.test/get.php?username=mariorossi041126"
+        "&amp;password=Xy7k2p&amp;type=m3u_plus&amp;output=mpegts</code>"
+    ) in body
+    assert "link VOD: <code>http://vod.test/get.php" in body
+
     assert ctx.bot.sent[-1][0] == PRIVATE.id
-    assert "Nuova linea confermata" in ctx.bot.sent[-1][1]
+    assert "link Live" in ctx.bot.sent[-1][1]
+    async with bot_session_factory() as check:
+        stored = await check.get(NewLineRequest, request.id)
+        assert stored.announced_at is not None
+
+
+async def test_confirmation_with_panel_data_sends_codes_immediately(
+    session, bot_session_factory, monkeypatch
+) -> None:
+    reseller_row = await _seed(session, with_group=False)
+    request = await _request(session, reseller_row, months=3)
+    ctx = context()
+    owner_chat = SimpleNamespace(id=OWNER_ID, type="private")
+
+    async def fake_sync() -> None:
+        async with bot_session_factory() as check:
+            stored = await check.get(NewLineRequest, request.id)
+            line_id = stored.line_id
+        await _add_panels(
+            bot_session_factory,
+            line_id=line_id,
+            username=request.username,
+            note=request.note,
+            expires_on=date(2027, 2, 4),
+        )
+
+    monkeypatch.setattr(line_request, "_sync_panels", fake_sync)
+
+    confirm = await _confirm_with_price(ctx, request, owner_chat)
+
+    body = confirm.callback_query.edits[-1]
+    assert "Nuova linea attiva" in body
+    assert "username: <code>mariorossi041126</code>" in body
+    assert "link VOD" in body
+    assert f"nls:{request.id}" not in _callbacks(confirm.callback_query.markup)
+    assert "link Live" in ctx.bot.sent[-1][1]
 
 
 async def test_owner_rejection_is_announced(session, bot_session_factory) -> None:
@@ -476,6 +598,6 @@ def test_new_line_callbacks_are_registered(monkeypatch) -> None:
             if getattr(handler, "pattern", None) is not None
         }
         assert "^nlr:" in patterns
-        assert "^(nla|nlp|nlx):" in patterns
+        assert "^(nla|nlp|nlx|nls):" in patterns
     finally:
         get_settings.cache_clear()
